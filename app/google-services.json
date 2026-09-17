@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "691603728781",
+    "project_id": "germinimobile",
+    "storage_bucket": "germinimobile.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:691603728781:android:2361572e63ee81a31e75c4",
+        "android_client_info": {
+          "package_name": "com.example.aiapi"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBwUXsfTnxj9txKvIvX63ABUAQfQEw5tAw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:691603728781:android:da153cad94ba9f6d1e75c4",
+        "android_client_info": {
+          "package_name": "com.example.kairos"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBwUXsfTnxj9txKvIvX63ABUAQfQEw5tAw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

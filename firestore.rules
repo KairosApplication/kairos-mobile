@@ -1,0 +1,44 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function owner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+    function validProfile(uid) {
+      let d = request.resource.data;
+      return d.keys().hasAll(['uid', 'name', 'lastName', 'birthDate', 'cpf', 'email', 'zipCode', 'plan'])
+        && d.keys().hasOnly(['uid', 'name', 'lastName', 'birthDate', 'cpf', 'email', 'zipCode', 'plan'])
+        && d.uid == uid
+        && d.email is string && d.email == request.auth.token.email && d.email.size() <= 255
+        && d.name is string && d.name.size() > 0 && d.name.size() <= 100
+        && d.lastName is string && d.lastName.size() > 0 && d.lastName.size() <= 100
+        && d.birthDate is string && d.birthDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && d.cpf is string && d.cpf.matches('^[0-9]{11}$')
+        && d.zipCode is string && d.zipCode.matches('^[0-9]{8}$')
+        && d.plan is string && d.plan.size() > 0 && d.plan.size() <= 20;
+    }
+
+    match /users/{uid} {
+      allow get: if owner(uid);
+      allow create: if owner(uid) && validProfile(uid)
+        && getAfter(/databases/$(database)/documents/cpfClaims/$(request.resource.data.cpf)).data.uid == uid;
+      // Perfil imutável neste fluxo. Plano é informação cadastral, nunca permissão.
+      allow list, update, delete: if false;
+    }
+
+    // Reserva de CPF feita atomicamente com users/{uid}; evita duplicidade.
+    match /cpfClaims/{cpf} {
+      allow get: if request.auth != null
+        && (!exists(/databases/$(database)/documents/cpfClaims/$(cpf))
+          || resource.data.uid == request.auth.uid);
+      allow create: if request.auth != null && cpf.matches('^[0-9]{11}$')
+        && request.resource.data.keys().hasOnly(['uid'])
+        && request.resource.data.uid == request.auth.uid
+        && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.cpf == cpf;
+      allow list, update, delete: if false;
+    }
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
