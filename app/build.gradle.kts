@@ -2,7 +2,13 @@ plugins {
     alias(libs.plugins.android.application)
 }
 
+// Permite compilar sem credenciais; a tela explica a configuração pendente.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 android {
+    buildFeatures { buildConfig = true }
     namespace = "com.example.kairos"
     compileSdk {
         version = release(36)
@@ -11,7 +17,7 @@ android {
     defaultConfig {
         applicationId = "com.example.kairos"
         minSdk = 29
-        targetSdk = 36
+        targetSdk = 29
         versionCode = 1
         versionName = "1.0"
 
@@ -34,6 +40,11 @@ android {
 }
 
 dependencies {
+    implementation(platform("com.google.firebase:firebase-bom:34.19.0"))
+    implementation("com.google.firebase:firebase-auth")
+    implementation("com.google.firebase:firebase-firestore")
+    implementation("androidx.lifecycle:lifecycle-viewmodel:2.10.0")
+    implementation("androidx.lifecycle:lifecycle-livedata-core:2.10.0")
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
