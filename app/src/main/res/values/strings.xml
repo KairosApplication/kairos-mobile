@@ -1,3 +1,11 @@
 <resources>
     <string name="app_name">Kairos</string>
+    <string name="onboarding_illustration_description">Ilustração da apresentação do Kairos</string>
+    <string name="onboarding_title_time">Tudo no seu tempo</string>
+    <string name="onboarding_title_restocking">Reposição mais inteligente</string>
+    <string name="onboarding_title_connected">Uma experiência mais conectada</string>
+    <string name="onboarding_description">Gerencie suas atividades\nde forma simples e rápida.</string>
+    <string name="onboarding_next">Próximo ➜</string>
+    <string name="onboarding_start">Começar</string>
+    <string name="onboarding_counter">%1$d / %2$d</string>
 </resources>

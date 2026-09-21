@@ -36,11 +36,28 @@ class MainActivity : AppCompatActivity() {
     private var splashRoot: FrameLayout? = null
     private var splashView: View? = null
     private var dismissSplash: Runnable? = null
+    private var onboardingRoot: View? = null
+    private var onboardingPage = 0
+    private var onboardingCompleted = false
+
+    private data class OnboardingPage(
+        val illustration: Int,
+        val title: Int
+    )
+
+    private val onboardingPages = listOf(
+        OnboardingPage(R.drawable.ic_onboarding_1, R.string.onboarding_title_time),
+        OnboardingPage(R.drawable.ic_onboarding_2, R.string.onboarding_title_restocking),
+        OnboardingPage(R.drawable.ic_onboarding_3, R.string.onboarding_title_connected)
+    )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
         splashCompleted = savedInstanceState?.getBoolean("splashCompleted", false) ?: false
+        onboardingCompleted = savedInstanceState?.getBoolean("onboardingCompleted", false) ?: false
+        onboardingPage = savedInstanceState?.getInt("onboardingPage", 0)
+            ?.coerceIn(onboardingPages.indices) ?: 0
         enableEdgeToEdge()
         vm = ViewModelProvider(this, AuthViewModel.Factory(AuthDependencies.repository(applicationContext)))[AuthViewModel::class.java]
         val scroll = ScrollView(this)
@@ -53,6 +70,7 @@ class MainActivity : AppCompatActivity() {
         val root = FrameLayout(this)
         root.addView(scroll, FrameLayout.LayoutParams(-1, -1))
         setContentView(root)
+        showOnboarding(root)
         showSplash(root)
         ViewCompat.setOnApplyWindowInsetsListener(scroll) { view, insets ->
             val safe = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.ime())
@@ -72,6 +90,15 @@ class MainActivity : AppCompatActivity() {
         }
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
+                if (onboardingRoot != null) {
+                    if (onboardingPage > 0) {
+                        onboardingPage--
+                        renderOnboarding()
+                    } else {
+                        finish()
+                    }
+                    return
+                }
                 if (vm.state.value?.loading == true) return
                 if (vm.state.value?.screen == AuthScreen.LOGIN) finish()
                 else vm.navigate(AuthScreen.LOGIN)
@@ -81,11 +108,65 @@ class MainActivity : AppCompatActivity() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putBoolean("splashCompleted", splashCompleted)
+        outState.putBoolean("onboardingCompleted", onboardingCompleted)
+        outState.putInt("onboardingPage", onboardingPage)
         outState.putBundle("form", Bundle().apply {
             fields.filterKeys { it !in setOf("password", "confirmation", "code") }
                 .forEach { (key, field) -> putString(key, field.text.toString()) }
         })
         super.onSaveInstanceState(outState)
+    }
+
+    private fun showOnboarding(root: FrameLayout) {
+        if (onboardingCompleted || vm.state.value?.screen != AuthScreen.LOGIN) return
+        val onboarding = layoutInflater.inflate(R.layout.view_onboarding, root, false)
+        onboardingRoot = onboarding
+        root.addView(onboarding, FrameLayout.LayoutParams(-1, -1))
+        ViewCompat.setOnApplyWindowInsetsListener(onboarding) { view, insets ->
+            val safe = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            view.setPadding(safe.left, safe.top, safe.right, safe.bottom)
+            insets
+        }
+        onboarding.findViewById<Button>(R.id.onboarding_next).setOnClickListener {
+            if (onboardingPage < onboardingPages.lastIndex) {
+                onboardingPage++
+                renderOnboarding()
+            } else {
+                onboardingCompleted = true
+                root.removeView(onboarding)
+                onboardingRoot = null
+            }
+        }
+        renderOnboarding()
+    }
+
+    private fun renderOnboarding() {
+        val root = onboardingRoot ?: return
+        val page = onboardingPages[onboardingPage]
+        root.findViewById<ImageView>(R.id.onboarding_illustration)
+            .setImageResource(page.illustration)
+        root.findViewById<TextView>(R.id.onboarding_title).setText(page.title)
+        root.findViewById<TextView>(R.id.onboarding_description)
+            .setText(R.string.onboarding_description)
+        root.findViewById<TextView>(R.id.onboarding_counter).text = getString(
+            R.string.onboarding_counter,
+            onboardingPage + 1,
+            onboardingPages.size
+        )
+        listOf(R.id.onboarding_dot_1, R.id.onboarding_dot_2, R.id.onboarding_dot_3)
+            .forEachIndexed { index, id ->
+                root.findViewById<View>(id).setBackgroundResource(
+                    if (index == onboardingPage) R.drawable.onboarding_dot_active
+                    else R.drawable.onboarding_dot_inactive
+                )
+            }
+        root.findViewById<Button>(R.id.onboarding_next).setText(
+            if (onboardingPage == onboardingPages.lastIndex) {
+                R.string.onboarding_start
+            } else {
+                R.string.onboarding_next
+            }
+        )
     }
 
     private fun showSplash(root: FrameLayout) {
@@ -134,6 +215,7 @@ class MainActivity : AppCompatActivity() {
         splashView = null
         splashRoot = null
         dismissSplash = null
+        onboardingRoot = null
         super.onDestroy()
     }
 
