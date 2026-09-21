@@ -2,5 +2,9 @@
 <resources>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
-    <color name="kairos_splash_background">#1B4D3E</color>
+    <color name="kairos_splash_background">#008563</color>
+    <color name="kairos_splash_background_bottom">#174C40</color>
+    <color name="kairos_onboarding_background">#1B4D3E</color>
+    <color name="kairos_onboarding_accent">#E8A825</color>
+    <color name="kairos_onboarding_indicator">#466D5D</color>
 </resources>
