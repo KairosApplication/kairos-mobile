@@ -7,7 +7,7 @@
 
     <style name="Theme.Kairos" parent="Base.Theme.Kairos" />
     <style name="Theme.Kairos.Starting" parent="Theme.SplashScreen">
-        <item name="android:windowBackground">@color/kairos_splash_background</item>
+        <item name="android:windowBackground">@drawable/splash_background</item>
         <item name="windowSplashScreenBackground">@color/kairos_splash_background</item>
         <!-- O layout mostra a marca completa, sem o recorte circular do ícone do sistema. -->
         <item name="windowSplashScreenAnimatedIcon">@drawable/splash_transparent</item>

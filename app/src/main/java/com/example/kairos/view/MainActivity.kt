@@ -2,7 +2,6 @@ package com.example.kairos.view
 
 import android.os.Bundle
 import android.animation.ValueAnimator
-import android.graphics.drawable.ColorDrawable
 import android.text.InputFilter
 import android.text.InputType
 import android.view.View
@@ -93,7 +92,7 @@ class MainActivity : AppCompatActivity() {
         if (splashCompleted) return
         splashRoot = root
         val originalBackground = window.decorView.background
-        window.setBackgroundDrawable(ColorDrawable(getColor(R.color.kairos_splash_background)))
+        window.setBackgroundDrawableResource(R.drawable.splash_background)
         val splash = layoutInflater.inflate(R.layout.view_splash, root, false)
         splashView = splash
         root.addView(splash)
