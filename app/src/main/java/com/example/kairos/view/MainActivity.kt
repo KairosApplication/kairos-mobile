@@ -1,15 +1,23 @@
 package com.example.kairos.view
 
 import android.os.Bundle
+import android.animation.ValueAnimator
+import android.graphics.drawable.ColorDrawable
 import android.text.InputFilter
 import android.text.InputType
 import android.view.View
+import android.view.animation.AccelerateDecelerateInterpolator
 import android.widget.*
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsControllerCompat
+import androidx.core.view.doOnPreDraw
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import com.example.kairos.R
 import androidx.lifecycle.ViewModelProvider
 import com.example.kairos.model.auth.*
 import com.example.kairos.viewmodel.*
@@ -25,9 +33,15 @@ class MainActivity : AppCompatActivity() {
     private val fields = linkedMapOf<String, EditText>()
     private val controls = mutableListOf<View>()
     private var renderedScreen: AuthScreen? = null
+    private var splashCompleted = false
+    private var splashRoot: FrameLayout? = null
+    private var splashView: View? = null
+    private var dismissSplash: Runnable? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen()
         super.onCreate(savedInstanceState)
+        splashCompleted = savedInstanceState?.getBoolean("splashCompleted", false) ?: false
         enableEdgeToEdge()
         vm = ViewModelProvider(this, AuthViewModel.Factory(AuthDependencies.repository(applicationContext)))[AuthViewModel::class.java]
         val scroll = ScrollView(this)
@@ -37,7 +51,10 @@ class MainActivity : AppCompatActivity() {
             setPadding(padding, padding, padding, padding)
         }
         scroll.addView(form)
-        setContentView(scroll)
+        val root = FrameLayout(this)
+        root.addView(scroll, FrameLayout.LayoutParams(-1, -1))
+        setContentView(root)
+        showSplash(root)
         ViewCompat.setOnApplyWindowInsetsListener(scroll) { view, insets ->
             val safe = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.ime())
             view.setPadding(safe.left, safe.top, safe.right, safe.bottom)
@@ -64,11 +81,61 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean("splashCompleted", splashCompleted)
         outState.putBundle("form", Bundle().apply {
             fields.filterKeys { it !in setOf("password", "confirmation", "code") }
                 .forEach { (key, field) -> putString(key, field.text.toString()) }
         })
         super.onSaveInstanceState(outState)
+    }
+
+    private fun showSplash(root: FrameLayout) {
+        if (splashCompleted) return
+        splashRoot = root
+        val originalBackground = window.decorView.background
+        window.setBackgroundDrawable(ColorDrawable(getColor(R.color.kairos_splash_background)))
+        val splash = layoutInflater.inflate(R.layout.view_splash, root, false)
+        splashView = splash
+        root.addView(splash)
+        val bars = WindowCompat.getInsetsController(window, root)
+        bars.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        bars.hide(WindowInsetsCompat.Type.systemBars())
+        dismissSplash = Runnable {
+            dismissSplash = null
+            // Restaura o fundo da próxima tela enquanto a splash ainda está opaca.
+            window.setBackgroundDrawable(originalBackground)
+            val finishTransition = Runnable {
+                splashCompleted = true
+                root.removeView(splash)
+                bars.show(WindowInsetsCompat.Type.systemBars())
+                splashView = null
+                splashRoot = null
+            }
+            if (ValueAnimator.areAnimatorsEnabled()) {
+                splash.animate()
+                    .alpha(0f)
+                    .setDuration(450L)
+                    .setInterpolator(AccelerateDecelerateInterpolator())
+                    .withEndAction(finishTransition)
+                    .start()
+            } else {
+                finishTransition.run()
+            }
+        }
+        // Só conta o tempo depois que o layout está pronto para ser exibido.
+        // A inicialização do Firebase não pode consumir a duração da splash.
+        splash.doOnPreDraw {
+            dismissSplash?.let { root.postDelayed(it, 2000L) }
+        }
+    }
+
+    override fun onDestroy() {
+        dismissSplash?.let { splashRoot?.removeCallbacks(it) }
+        splashView?.animate()?.withEndAction(null)?.cancel()
+        splashView = null
+        splashRoot = null
+        dismissSplash = null
+        super.onDestroy()
     }
 
     private fun field(key: String, label: String, type: Int = InputType.TYPE_CLASS_TEXT, max: Int = 255) {
