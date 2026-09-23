@@ -38,6 +38,25 @@ class FirebaseAuthRepositoryTest {
     private val store = StoreFake()
     private val repo = FirebaseAuthRepository(auth, store)
 
+    @Test fun createsAccountThenCompletesProfileWithoutCreatingAnotherAccount() {
+        val account = repo.registerAccount(request.email, request.password)
+        assertNull(account.profile)
+        assertNull(store.saved)
+        assertEquals(account, repo.restoreSession())
+        val completed = repo.completeProfile(request.details())
+        assertNotNull(completed.profile)
+        assertEquals(account.uid, completed.uid)
+        assertEquals(1, auth.creates)
+    }
+
+    @Test fun rejectsInvalidCredentialsBeforeCreatingAccount() {
+        listOf("invalid" to "senhaTeste", request.email to "123").forEach { (email, password) ->
+            try { repo.registerAccount(email, password); fail() }
+            catch (_: IllegalArgumentException) { }
+        }
+        assertEquals(0, auth.creates)
+    }
+
     @Test fun savesModelFieldsWithoutPassword() {
         val user = repo.register(request)
         val data = user.profile!!.toDocument()

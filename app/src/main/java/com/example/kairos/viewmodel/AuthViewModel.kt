@@ -71,6 +71,12 @@ class AuthViewModel(private val repository: AuthRepository?) : ViewModel() {
         authenticated(it.register(request))
     }
 
+    fun registerAccount(email: String, password: String, confirmation: String, acceptedTerms: Boolean) = run {
+        require(acceptedTerms) { "Marque a opção de concordância com os termos de serviço." }
+        require(password == confirmation) { "As senhas não coincidem." }
+        authenticated(it.registerAccount(email, password))
+    }
+
     fun login(email: String, password: String) = run {
         authenticated(it.login(email, password))
     }
