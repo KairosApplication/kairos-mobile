@@ -9,6 +9,9 @@ if (file("google-services.json").exists()) {
 
 android {
     buildFeatures { buildConfig = true }
+    lint {
+        baseline = file("lint-baseline.xml")
+    }
     namespace = "com.example.kairos"
     compileSdk {
         version = release(36)

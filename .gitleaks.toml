@@ -1,0 +1,9 @@
+title = "Kairos Mobile Gitleaks configuration"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Firebase Android configuration contains public project identifiers"
+targetRules = ["gcp-api-key", "generic-api-key"]
+paths = ['''(?:^|/)app/google-services\.json$''']
