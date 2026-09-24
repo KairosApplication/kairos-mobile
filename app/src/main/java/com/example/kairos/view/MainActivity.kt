@@ -23,12 +23,14 @@ import com.example.kairos.viewmodel.*
 import java.time.LocalDate
 import java.time.format.DateTimeParseException
 
-/** UI provisória; operações e estado ficam no ViewModel. */
+/** Entrada do Figma; recuperação, perfil e destino provisório usam os fluxos existentes. */
 class MainActivity : AppCompatActivity() {
     private lateinit var vm: AuthViewModel
     private lateinit var form: LinearLayout
     private lateinit var message: TextView
     private lateinit var progress: ProgressBar
+    private lateinit var authEntry: AuthEntryView
+    private lateinit var formScroll: ScrollView
     private val fields = linkedMapOf<String, EditText>()
     private val controls = mutableListOf<View>()
     private var renderedScreen: AuthScreen? = null
@@ -61,6 +63,7 @@ class MainActivity : AppCompatActivity() {
         enableEdgeToEdge()
         vm = ViewModelProvider(this, AuthViewModel.Factory(AuthDependencies.repository(applicationContext)))[AuthViewModel::class.java]
         val scroll = ScrollView(this)
+        formScroll = scroll
         form = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             val padding = (20 * resources.displayMetrics.density).toInt()
@@ -69,6 +72,8 @@ class MainActivity : AppCompatActivity() {
         scroll.addView(form)
         val root = FrameLayout(this)
         root.addView(scroll, FrameLayout.LayoutParams(-1, -1))
+        authEntry = AuthEntryView(this, vm)
+        root.addView(authEntry, FrameLayout.LayoutParams(-1, -1))
         setContentView(root)
         showOnboarding(root)
         showSplash(root)
@@ -82,11 +87,15 @@ class MainActivity : AppCompatActivity() {
         savedInstanceState?.getBundle("form")?.let { saved ->
             fields.forEach { (key, field) -> saved.getString(key)?.let { field.setText(it) } }
         }
+        authEntry.restore(savedInstanceState?.getBundle("authEntry"))
         vm.state.observe(this) { state ->
             if (renderedScreen != state.screen) render(state)
-            message.text = state.message
-            progress.visibility = if (state.loading) View.VISIBLE else View.GONE
-            controls.forEach { it.isEnabled = !state.loading }
+            authEntry.update(state)
+            if (authEntry.visibility != View.VISIBLE) {
+                message.text = state.message
+                progress.visibility = if (state.loading) View.VISIBLE else View.GONE
+                controls.forEach { it.isEnabled = !state.loading }
+            }
         }
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -107,6 +116,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBundle("authEntry", authEntry.save())
         outState.putBoolean("splashCompleted", splashCompleted)
         outState.putBoolean("onboardingCompleted", onboardingCompleted)
         outState.putInt("onboardingPage", onboardingPage)
@@ -210,6 +220,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        authEntry.close()
         dismissSplash?.let { splashRoot?.removeCallbacks(it) }
         splashView?.animate()?.withEndAction(null)?.cancel()
         splashView = null
@@ -242,6 +253,19 @@ class MainActivity : AppCompatActivity() {
 
     private fun render(state: AuthUiState) {
         renderedScreen = state.screen
+        val isEntry = state.screen == AuthScreen.LOGIN || state.screen == AuthScreen.REGISTER
+        WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars =
+            !isEntry && (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK !=
+                android.content.res.Configuration.UI_MODE_NIGHT_YES)
+        authEntry.visibility = if (isEntry) View.VISIBLE else View.GONE
+        formScroll.visibility = if (isEntry) View.GONE else View.VISIBLE
+        if (isEntry) {
+            fields.clear()
+            controls.clear()
+            authEntry.update(state)
+            return
+        }
+        authEntry.close()
         form.removeAllViews()
         fields.clear()
         controls.clear()
@@ -263,41 +287,22 @@ class MainActivity : AppCompatActivity() {
         progress = ProgressBar(this)
         form.addView(progress)
         val emailType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
-        val passwordType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
         when (state.screen) {
-            AuthScreen.LOGIN -> {
-                field("email", "Email", emailType)
-                field("password", "Senha", passwordType)
-                button("Entrar") { vm.login(value("email").trim(), value("password")) }
-                button("Cadastrar") { vm.navigate(AuthScreen.REGISTER) }
-                button("Esqueci minha senha") { vm.navigate(AuthScreen.RECOVERY) }
-            }
-            AuthScreen.REGISTER, AuthScreen.COMPLETE_PROFILE -> {
+            AuthScreen.LOGIN, AuthScreen.REGISTER -> Unit // Rendered by AuthEntryView above.
+            AuthScreen.COMPLETE_PROFILE -> {
                 field("name", "Nome", max = 100)
                 field("lastName", "Sobrenome", max = 100)
                 field("birthDate", "Nascimento (AAAA-MM-DD)", max = 10)
                 field("cpf", "CPF", max = 14)
-                if (state.screen == AuthScreen.REGISTER) {
-                    field("email", "Email", emailType)
-                    field("password", "Senha (mínimo 6 caracteres)", passwordType)
-                    field("confirmation", "Confirmar senha", passwordType)
-                } else {
-                    form.addView(TextView(this).apply { text = state.user?.email.orEmpty() })
-                }
+                form.addView(TextView(this).apply { text = state.user?.email.orEmpty() })
                 field("zipCode", "CEP", max = 9)
                 field("plan", "Plano", max = 20)
                 button("Concluir cadastro") {
                     try {
-                        if (state.screen == AuthScreen.COMPLETE_PROFILE) {
-                            vm.completeProfile(ProfileDetails(
-                                value("name").trim(), value("lastName").trim(), LocalDate.parse(value("birthDate").trim()),
-                                value("cpf").trim(), value("zipCode").trim(), value("plan").trim()
-                            ))
-                        } else vm.register(Registration(
+                        vm.completeProfile(ProfileDetails(
                             value("name").trim(), value("lastName").trim(), LocalDate.parse(value("birthDate").trim()),
-                            value("cpf").trim(), value("email").trim(), value("password"),
-                            value("zipCode").trim(), value("plan").trim()
-                        ), value("confirmation"))
+                            value("cpf").trim(), value("zipCode").trim(), value("plan").trim()
+                        ))
                     } catch (_: DateTimeParseException) {
                         vm.showError("Informe uma data válida no formato AAAA-MM-DD.")
                     }
