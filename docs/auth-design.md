@@ -18,7 +18,7 @@ Both popup backgrounds are native white `GradientDrawable` shapes with 36-unit
 top corner radii and square bottom corners. Their centered 111 × 5 green handles
 are native rounded shapes too. These elements do not use raster images.
 
-Montserrat and Inter are bundled locally with their OFL licenses in `docs/licenses`.
+Inter is bundled locally with its OFL license in `docs/licenses`. Other interface text uses the Android default font.
 The panel contents scroll when the keyboard or available screen height requires it.
 Passwords are deliberately excluded from saved instance state.
 

@@ -30,6 +30,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var message: TextView
     private lateinit var progress: ProgressBar
     private lateinit var authEntry: AuthEntryView
+    private lateinit var loadingView: LoadingView
     private lateinit var formScroll: ScrollView
     private val fields = linkedMapOf<String, EditText>()
     private val controls = mutableListOf<View>()
@@ -74,6 +75,8 @@ class MainActivity : AppCompatActivity() {
         root.addView(scroll, FrameLayout.LayoutParams(-1, -1))
         authEntry = AuthEntryView(this, vm)
         root.addView(authEntry, FrameLayout.LayoutParams(-1, -1))
+        loadingView = LoadingView(this).apply { visibility = View.GONE }
+        root.addView(loadingView, FrameLayout.LayoutParams(-1, -1))
         setContentView(root)
         showOnboarding(root)
         showSplash(root)
@@ -91,7 +94,7 @@ class MainActivity : AppCompatActivity() {
         vm.state.observe(this) { state ->
             if (renderedScreen != state.screen) render(state)
             authEntry.update(state)
-            if (authEntry.visibility != View.VISIBLE) {
+            if (formScroll.visibility == View.VISIBLE) {
                 message.text = state.message
                 progress.visibility = if (state.loading) View.VISIBLE else View.GONE
                 controls.forEach { it.isEnabled = !state.loading }
@@ -254,11 +257,21 @@ class MainActivity : AppCompatActivity() {
     private fun render(state: AuthUiState) {
         renderedScreen = state.screen
         val isEntry = state.screen == AuthScreen.LOGIN || state.screen == AuthScreen.REGISTER
+        val isLoading = state.screen == AuthScreen.LOADING
         WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars =
-            !isEntry && (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK !=
+            !isEntry && !isLoading && (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK !=
                 android.content.res.Configuration.UI_MODE_NIGHT_YES)
         authEntry.visibility = if (isEntry) View.VISIBLE else View.GONE
-        formScroll.visibility = if (isEntry) View.GONE else View.VISIBLE
+        formScroll.visibility = if (isEntry || isLoading) View.GONE else View.VISIBLE
+        loadingView.visibility = if (isLoading) View.VISIBLE else View.GONE
+        if (isLoading) {
+            (getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager)
+                .hideSoftInputFromWindow(window.decorView.windowToken, 0)
+            authEntry.update(state) // Dismiss the login dialog before displaying the destination.
+            fields.clear()
+            controls.clear()
+            return
+        }
         if (isEntry) {
             fields.clear()
             controls.clear()
@@ -276,6 +289,7 @@ class MainActivity : AppCompatActivity() {
             textSize = 24f
             text = when (state.screen) {
                 AuthScreen.LOGIN -> "Login"
+                AuthScreen.LOADING -> getString(R.string.loading)
                 AuthScreen.REGISTER -> "Cadastrar usuário"
                 AuthScreen.RECOVERY -> "Recuperar senha"
                 AuthScreen.COMPLETE_PROFILE -> "Completar cadastro"
@@ -288,7 +302,7 @@ class MainActivity : AppCompatActivity() {
         form.addView(progress)
         val emailType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
         when (state.screen) {
-            AuthScreen.LOGIN, AuthScreen.REGISTER -> Unit // Rendered by AuthEntryView above.
+            AuthScreen.LOGIN, AuthScreen.REGISTER, AuthScreen.LOADING -> Unit // Rendered above.
             AuthScreen.COMPLETE_PROFILE -> {
                 field("name", "Nome", max = 100)
                 field("lastName", "Sobrenome", max = 100)

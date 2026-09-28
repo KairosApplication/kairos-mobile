@@ -37,12 +37,12 @@ class AuthEntryView(private val activity: AppCompatActivity, private val vm: Aut
     private val density = resources.displayMetrics.density
     private val scale get() = (resources.displayMetrics.widthPixels / density / 412f).coerceAtMost(1.3f)
     private fun px(value: Float) = (value * scale * density).toInt()
-    private val montserrat = ResourcesCompat.getFont(context, R.font.montserrat)!!
     private val inter = ResourcesCompat.getFont(context, R.font.inter)!!
     private var dialog: BottomSheetDialog? = null
     private var registration = false
     private var replacing = false
     private var loading = false
+    private var loginEmail: String? = null
     private val fields = linkedMapOf<String, EditText>()
     private val controls = mutableListOf<View>()
     private var feedback: TextView? = null
@@ -75,11 +75,11 @@ class AuthEntryView(private val activity: AppCompatActivity, private val vm: Aut
         })
         listOf("Cadastrar" to true, "Entrar" to false).forEach { (title, register) ->
             val button = action(title, if (register) Color.WHITE else Color.BLACK,
-                if (register) Color.BLACK else Color.WHITE, 30f, 500) {
+                if (register) Color.BLACK else Color.WHITE, 24f, 500) {
                 if (register) vm.navigate(AuthScreen.REGISTER) else openSheet(false)
             }
             landingControls.add(button)
-            content.addView(button, LinearLayout.LayoutParams(-1, px(86f)).apply {
+            content.addView(button, LinearLayout.LayoutParams(px(281.6f), px(68.8f)).apply {
                 setMargins(px(31f), 0, px(29f), if (register) px(29f) else 0)
             })
         }
@@ -99,7 +99,7 @@ class AuthEntryView(private val activity: AppCompatActivity, private val vm: Aut
         text = value
         setTextSize(TypedValue.COMPLEX_UNIT_SP, size * scale)
         setTextColor(color)
-        typeface = Typeface.create(montserrat, weight, false)
+        typeface = Typeface.create(Typeface.DEFAULT, weight, false)
         gravity = Gravity.CENTER
         includeFontPadding = false
     }
@@ -115,7 +115,7 @@ class AuthEntryView(private val activity: AppCompatActivity, private val vm: Aut
         isAllCaps = false
         setTextColor(foreground)
         setTextSize(TypedValue.COMPLEX_UNIT_SP, size * scale)
-        typeface = Typeface.create(montserrat, weight, false)
+        typeface = Typeface.create(Typeface.DEFAULT, weight, false)
         backgroundTintList = null
         this.background = android.graphics.drawable.RippleDrawable(
             ColorStateList.valueOf(0x22000000), rounded(background, 100f), null)
@@ -128,11 +128,18 @@ class AuthEntryView(private val activity: AppCompatActivity, private val vm: Aut
 
     fun update(state: AuthUiState) {
         loading = state.loading
+        if (state.screen == AuthScreen.LOADING && dialog != null) {
+            loginEmail = fields["email"]?.text?.toString()
+        }
         if (state.screen !in listOf(AuthScreen.LOGIN, AuthScreen.REGISTER)) {
             close()
             return
         }
         if (state.screen == AuthScreen.REGISTER && (dialog == null || !registration)) openSheet(true)
+        if (state.screen == AuthScreen.LOGIN && state.message.isNotEmpty() && dialog == null && loginEmail != null) {
+            openSheet(false)
+            fields["email"]?.setText(loginEmail)
+        }
         controls.forEach { it.isEnabled = !state.loading }
         landingControls.forEach { it.isEnabled = !state.loading }
         dialog?.setCancelable(!state.loading)
@@ -176,7 +183,7 @@ class AuthEntryView(private val activity: AppCompatActivity, private val vm: Aut
                 hint = title
                 contentDescription = title
                 inputType = InputType.TYPE_CLASS_TEXT or if (password) InputType.TYPE_TEXT_VARIATION_PASSWORD else InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
-                typeface = Typeface.create(montserrat, 500, false)
+                typeface = Typeface.create(Typeface.DEFAULT, 500, false)
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f * scale)
                 setTextColor(Color.BLACK)
                 setHintTextColor(Color.rgb(116, 116, 116))
@@ -293,11 +300,12 @@ class AuthEntryView(private val activity: AppCompatActivity, private val vm: Aut
     fun save(): Bundle = Bundle().apply {
         putBoolean("open", dialog != null)
         putBoolean("register", registration)
-        putString("email", fields["email"]?.text?.toString())
+        putString("email", fields["email"]?.text?.toString() ?: loginEmail)
         putBoolean("consent", consent?.isChecked == true)
     }
 
     fun restore(saved: Bundle?) {
+        loginEmail = saved?.getString("email")
         if (saved?.getBoolean("open") == true && vm.state.value?.screen in listOf(AuthScreen.LOGIN, AuthScreen.REGISTER)) {
             openSheet(saved.getBoolean("register"))
             fields["email"]?.setText(saved.getString("email"))
