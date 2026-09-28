@@ -5,6 +5,14 @@ class FirebaseAuthRepository(
     private val auth: AuthGateway,
     private val profiles: ProfileStore
 ) : AuthRepository {
+    override fun registerAccount(email: String, password: String): SignedInUser {
+        AuthValidation.email(email)
+        AuthValidation.password(password)
+        require(password.length >= 6) { "Use uma senha com pelo menos 6 caracteres." }
+        val identity = auth.create(email, password)
+        return SignedInUser(identity.uid, identity.email, null)
+    }
+
     override fun register(request: Registration): SignedInUser {
         request.validate()
         val identity = auth.create(request.email, request.password)
