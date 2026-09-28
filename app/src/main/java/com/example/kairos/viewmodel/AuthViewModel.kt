@@ -88,7 +88,7 @@ class AuthViewModel(private val repository: AuthRepository?) : ViewModel() {
     }
 
     fun login(email: String, password: String) = run(
-        minimumLoadingMillis = 2_500L, loadingScreen = AuthScreen.LOADING
+        minimumLoadingMillis = 3_000L, loadingScreen = AuthScreen.LOADING
     ) {
         authenticated(it.login(email, password))
     }

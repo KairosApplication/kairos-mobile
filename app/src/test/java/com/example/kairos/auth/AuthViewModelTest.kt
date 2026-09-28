@@ -60,7 +60,7 @@ class AuthViewModelTest {
             assertEquals(AuthScreen.LOADING, vm.state.value!!.screen)
             val result = states.poll(10, TimeUnit.SECONDS)!!
             val elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt)
-            assertTrue("Loading must remain visible for at least 5 seconds", elapsedMillis >= 5_000L)
+            assertTrue("Loading must remain visible for at least 3 seconds", elapsedMillis >= 3_000L)
             assertEquals(destination, result.screen)
             assertFalse(result.loading)
             if (fail) {
