@@ -25,7 +25,7 @@ Passwords are deliberately excluded from saved instance state.
 Registration creates the Firebase identity first and then opens the existing
 profile-completion screen for name, surname, birth date, CPF, ZIP code and plan.
 No profile values are invented or defaulted. Completing the profile reaches the
-existing temporary home screen. Existing users with a complete profile reach it
+stocker Home described in `stocker-home.md`. Existing users with a complete profile reach it
 directly after login. Password recovery still uses the existing email-link flow.
 
 The service-terms link currently displays an explicit unavailable-content notice:
