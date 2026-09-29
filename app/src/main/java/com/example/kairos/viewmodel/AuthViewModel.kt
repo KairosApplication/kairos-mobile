@@ -6,8 +6,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import com.example.kairos.model.auth.*
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
-enum class AuthScreen { LOGIN, REGISTER, RECOVERY, COMPLETE_PROFILE, HOME }
+enum class AuthScreen { LOGIN, LOADING, REGISTER, RECOVERY, COMPLETE_PROFILE, HOME }
 
 data class AuthUiState(
     val screen: AuthScreen = AuthScreen.LOGIN,
@@ -19,7 +20,7 @@ data class AuthUiState(
 class AuthViewModel(private val repository: AuthRepository?) : ViewModel() {
     private val mutableState = MutableLiveData(AuthUiState())
     val state: LiveData<AuthUiState> = mutableState
-    private val executor = Executors.newSingleThreadExecutor()
+    private val executor = Executors.newSingleThreadScheduledExecutor()
 
     init {
         if (repository == null) {
@@ -46,10 +47,15 @@ class AuthViewModel(private val repository: AuthRepository?) : ViewModel() {
         mutableState.value = mutableState.value!!.copy(message = message)
     }
 
-    private fun run(action: (AuthRepository) -> AuthUiState) {
+    private fun run(
+        minimumLoadingMillis: Long = 0L,
+        loadingScreen: AuthScreen? = null,
+        action: (AuthRepository) -> AuthUiState
+    ) {
         val previous = mutableState.value!!
         if (previous.loading) return
-        mutableState.value = previous.copy(loading = true, message = "")
+        mutableState.value = previous.copy(screen = loadingScreen ?: previous.screen, loading = true, message = "")
+        val startedAt = System.nanoTime()
         executor.execute {
             val result = try {
                 action(repository ?: throw IllegalArgumentException(
@@ -62,7 +68,11 @@ class AuthViewModel(private val repository: AuthRepository?) : ViewModel() {
             } catch (e: Exception) {
                 previous.copy(message = AuthErrorMessage.from(e))
             }
-            mutableState.postValue(result.copy(loading = false))
+            val elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt)
+            val remaining = (minimumLoadingMillis - elapsedMillis).coerceAtLeast(0L)
+            if (!executor.isShutdown) executor.schedule({
+                mutableState.postValue(result.copy(loading = false))
+            }, remaining, TimeUnit.MILLISECONDS)
         }
     }
 
@@ -77,7 +87,9 @@ class AuthViewModel(private val repository: AuthRepository?) : ViewModel() {
         authenticated(it.registerAccount(email, password))
     }
 
-    fun login(email: String, password: String) = run {
+    fun login(email: String, password: String) = run(
+        minimumLoadingMillis = 3_000L, loadingScreen = AuthScreen.LOADING
+    ) {
         authenticated(it.login(email, password))
     }
 
