@@ -4,8 +4,8 @@ Referência: [Home-Repositor no Figma](https://www.figma.com/design/OFMvU7yImxJF
 
 `StockerHomeView` substitui o destino provisório após autenticação e conclusão do
 perfil. Usa o nome da sessão e a data local. O conteúdo rola independentemente do
-menu inferior. Os textos usam a fonte padrão do Android, conforme solicitado;
-Montserrat não foi adicionada.
+menu inferior. A Home e suas abas usam Montserrat SemiBold (peso 600); as telas anteriores do fluxo,
+incluindo login, cadastro e carregamento, mantêm suas fontes próprias.
 
 Os ícones `drawable/home_*.xml` são conversões locais dos SVGs fornecidos pelo
 frame, feitas com o conversor Svg2Vector do Android Studio. `home_arrow_small`

@@ -12,9 +12,11 @@ import android.graphics.drawable.RippleDrawable
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
 import android.widget.*
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.res.ResourcesCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowCompat
@@ -50,6 +52,9 @@ class StockerHomeView(
     private fun str(id: Int, vararg args: Any) = context.getString(id, *args)
     private val ink = color(R.color.home_ink)
     private val secondary = color(R.color.home_secondary)
+    private val montserrat by lazy {
+        requireNotNull(ResourcesCompat.getFont(context, R.font.montserrat_semibold))
+    }
     private val locale = Locale.forLanguageTag("pt-BR")
     private val backdrop = Paint()
     private val statusBarPaint = Paint().apply { color = 0xFF0D6249.toInt() }
@@ -156,10 +161,10 @@ class StockerHomeView(
         scroll.scrollTo(0, 0)
     }
 
-    private fun label(text: String, size: Float, weight: Int = 400, tint: Int = ink) = TextView(context).apply {
+    private fun label(text: String, size: Float, tint: Int = ink) = TextView(context).apply {
         this.text = text
         textSize = size * scale
-        typeface = Typeface.create(Typeface.DEFAULT, weight, false)
+        typeface = Typeface.create(montserrat, 600, false)
         setTextColor(tint)
         includeFontPadding = false
     }
@@ -192,7 +197,7 @@ class StockerHomeView(
     }
 
     private fun heading(title: Int, top: Float) {
-        add(label(str(title), 24f, 600).apply { ViewCompat.setAccessibilityHeading(this, true) }, top, 25f)
+        add(label(str(title), 24f).apply { ViewCompat.setAccessibilityHeading(this, true) }, top, 25f)
     }
 
     private fun render() {
@@ -235,7 +240,7 @@ class StockerHomeView(
                 Tab.HISTORY -> events(data.history, R.string.home_empty_history)
                 Tab.CONFIG -> Unit
             }
-            if (data.isDemo) add(label(str(R.string.home_demo), 12f, tint = secondary).apply { gravity = Gravity.CENTER }, 18f)
+            if (data.isDemo) add(label(str(R.string.home_demo), 12f, secondary).apply { gravity = Gravity.CENTER }, 18f)
         }
         renderNav()
         invalidate()
@@ -259,10 +264,10 @@ class StockerHomeView(
         }
         val firstName = user?.name?.trim()?.substringBefore(' ').orEmpty()
         contents.addView(label(if (firstName.isBlank()) str(R.string.home_greeting_fallback) else str(R.string.home_greeting, firstName),
-            27f, 600, Color.WHITE), LinearLayout.LayoutParams(-1, -2).apply { setMargins(px(25f), 0, px(25f), 0) })
+            27f, Color.WHITE), LinearLayout.LayoutParams(-1, -2).apply { setMargins(px(25f), 0, px(25f), 0) })
         val today = LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE, d 'de' MMMM", locale))
             .replaceFirstChar { it.titlecase(locale) }
-        contents.addView(label(today, 18f, tint = Color.WHITE), LinearLayout.LayoutParams(-1, -2).apply {
+        contents.addView(label(today, 18f, Color.WHITE), LinearLayout.LayoutParams(-1, -2).apply {
             setMargins(px(25f), px(3f), px(25f), 0)
         })
         val verify = LinearLayout(context).apply {
@@ -279,8 +284,8 @@ class StockerHomeView(
         verify.addView(camera, LinearLayout.LayoutParams(px(68f), px(68f)))
         val description = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            addView(label(str(R.string.home_verify), 18f, 600))
-            addView(label(str(R.string.home_verify_description), 12f, tint = secondary),
+            addView(label(str(R.string.home_verify), 18f))
+            addView(label(str(R.string.home_verify_description), 12f, secondary),
                 LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(6f) })
         }
         verify.addView(description, LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = px(20f) })
@@ -303,10 +308,10 @@ class StockerHomeView(
             contentDescription = str(R.string.home_summary_accessibility, str(title), count)
         }
         card(column) { select(destination) }
-        column.addView(label(str(title), 16f, 600, secondary))
+        column.addView(label(str(title), 16f, secondary))
         val row = LinearLayout(context).apply { gravity = Gravity.CENTER_VERTICAL }
-        row.addView(label(count.toString(), 40f, 600))
-        row.addView(label(str(R.string.home_week), 15f, tint = secondary),
+        row.addView(label(count.toString(), 40f))
+        row.addView(label(str(R.string.home_week), 15f, secondary),
             LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = px(10f) })
         row.addView(icon(R.drawable.home_summary_arrow), LinearLayout.LayoutParams(px(21f), px(18f)))
         column.addView(row, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(4f) })
@@ -314,7 +319,7 @@ class StockerHomeView(
     }
 
     private fun events(values: List<HomeEvent>, empty: Int, firstGap: Float = 28f) {
-        if (values.isEmpty()) { add(label(str(empty), 16f, tint = secondary), firstGap); return }
+        if (values.isEmpty()) { add(label(str(empty), 16f, secondary), firstGap); return }
         values.forEachIndexed { index, event -> add(eventCard(event), if (index == 0) firstGap else 18f) }
     }
 
@@ -359,8 +364,8 @@ class StockerHomeView(
         row.addView(LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(px(21f), px(17f), px(12f), px(17f))
-            addView(label(title, 15.5f, 600))
-            addView(label(subtitle, 15f, tint = secondary), LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(4f) })
+            addView(label(title, 15.5f))
+            addView(label(subtitle, 15f, secondary), LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(4f) })
         }, LinearLayout.LayoutParams(0, -2, 1f))
         return row
     }
@@ -382,7 +387,7 @@ class StockerHomeView(
                 setOnClickListener { select(item) }
             }
             column.addView(icon(item.icon), LinearLayout.LayoutParams(px(32f), px(33f)))
-            column.addView(label(str(item.label), 12f, if (selected) 700 else 600, color(R.color.home_green)),
+            column.addView(label(str(item.label), 12f, color(R.color.home_green)),
                 LinearLayout.LayoutParams(-2, -2).apply { topMargin = px(3f) })
             column.addView(View(context).apply {
                 background = rounded(color(R.color.home_active), 50f)
@@ -393,10 +398,10 @@ class StockerHomeView(
     }
 
     private fun renderAccount() {
-        add(label(str(R.string.home_account), 18f, 600), 28f)
+        add(label(str(R.string.home_account), 18f), 28f)
         add(label(user?.name.orEmpty(), 18f), 12f)
-        add(label(user?.email.orEmpty(), 16f, tint = secondary), 8f)
-        if (state.data?.isDemo == true) add(label(str(R.string.home_demo_description), 16f, tint = secondary), 28f)
+        add(label(user?.email.orEmpty(), 16f, secondary), 8f)
+        if (state.data?.isDemo == true) add(label(str(R.string.home_demo_description), 16f, secondary), 28f)
         if (sessionMessage.isNotBlank()) add(label(sessionMessage, 16f).apply { accessibilityLiveRegion = ACCESSIBILITY_LIVE_REGION_POLITE }, 20f)
         add(textButton(str(if (signingOut) R.string.home_logging_out else R.string.home_logout), onLogout).apply {
             id = R.id.home_logout
@@ -407,6 +412,7 @@ class StockerHomeView(
     private fun textButton(title: String, action: () -> Unit) = androidx.appcompat.widget.AppCompatButton(context).apply {
         text = title
         isAllCaps = false
+        typeface = Typeface.create(montserrat, 600, false)
         setTextColor(Color.WHITE)
         backgroundTintList = ColorStateList.valueOf(color(R.color.home_green))
         setOnClickListener { action() }
@@ -416,5 +422,15 @@ class StockerHomeView(
         close()
         dialog = AlertDialog.Builder(activity).setTitle(title).setMessage(message)
             .setPositiveButton(R.string.home_ok, null).show()
+        dialog?.window?.decorView?.let(::applyMontserrat)
+    }
+
+    private fun applyMontserrat(view: View) {
+        if (view is TextView) {
+            view.typeface = Typeface.create(montserrat, 600, false)
+        }
+        if (view is ViewGroup) {
+            for (index in 0 until view.childCount) applyMontserrat(view.getChildAt(index))
+        }
     }
 }
