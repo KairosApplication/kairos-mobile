@@ -17,7 +17,9 @@ preserva o espaço transparente do componente original; a seta visível é
 - `DemoStockerHomeRepository` fornece exemplos locais identificados na interface.
   Não consulta nem altera estoque real.
 - `StockerHomeViewModel` carrega fora da thread da interface e descarta resultados
-  de sessões anteriores. Oferece estados de carregamento, erro e nova tentativa.
+  de sessões anteriores. Cancela a consulta anterior e permite que a nova conta
+  carregue mesmo quando a consulta antiga ignora interrupções. Oferece estados
+  de carregamento, erro e nova tentativa.
 - Pendências abre Alertas; Concluídas abre Histórico. Essas abas apresentam os
   exemplos do repositório. Configurações mantém os dados da conta e a saída real.
 - Verificar gôndola informa que a função por foto ainda está indisponível.
@@ -43,5 +45,8 @@ não há autorização de papel de repositor implementada nesta mudança.
 
 `StockerHomeTest` verifica navegação dos indicadores, restauração da aba, saída
 por callback, erro/nova tentativa, estado vazio e descarte de respostas de uma
-conta anterior. O teste de interface usa uma sessão local de exemplo e não faz
+conta anterior. O teste de troca de conta mantém a consulta antiga bloqueada até
+a nova concluir e rejeita qualquer publicação do resultado antigo. Um teste
+adicional verifica a falha do repositório e a recuperação via retry forçado.
+O teste de interface usa uma sessão local de exemplo e não faz
 login ou logout de uma conta real.

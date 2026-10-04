@@ -9,6 +9,8 @@ import androidx.lifecycle.ViewModelProvider
 import com.example.kairos.model.home.StockerHomeData
 import com.example.kairos.model.home.StockerHomeRepository
 import java.util.concurrent.Executors
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Future
 
 data class StockerHomeUiState(
     val loading: Boolean = false,
@@ -16,10 +18,13 @@ data class StockerHomeUiState(
     val failed: Boolean = false
 )
 
-class StockerHomeViewModel(private val repository: StockerHomeRepository) : ViewModel() {
+class StockerHomeViewModel(
+    private val repository: StockerHomeRepository,
+    private val worker: ExecutorService = Executors.newCachedThreadPool()
+) : ViewModel() {
     private val mutableState = MutableLiveData(StockerHomeUiState())
     val state: LiveData<StockerHomeUiState> = mutableState
-    private val worker = Executors.newSingleThreadExecutor()
+    private var activeRequest: Future<*>? = null
     private val main = Handler(Looper.getMainLooper())
     private var currentUserId: String? = null
     private var generation = 0L
@@ -28,8 +33,10 @@ class StockerHomeViewModel(private val repository: StockerHomeRepository) : View
         if (userId == currentUserId && (!force || mutableState.value?.loading == true)) return
         currentUserId = userId
         val request = ++generation
+        activeRequest?.cancel(true)
         mutableState.value = StockerHomeUiState(loading = true)
-        worker.execute {
+        // A previous repository call may ignore interruption; give the new call its own worker.
+        activeRequest = worker.submit {
             val result = try {
                 StockerHomeUiState(data = repository.load(userId))
             } catch (_: Exception) {
@@ -44,6 +51,8 @@ class StockerHomeViewModel(private val repository: StockerHomeRepository) : View
 
     fun reset() {
         generation++
+        activeRequest?.cancel(true)
+        activeRequest = null
         currentUserId = null
         mutableState.value = StockerHomeUiState()
     }

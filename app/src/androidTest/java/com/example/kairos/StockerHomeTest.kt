@@ -26,6 +26,8 @@ import java.io.File
 import java.time.LocalDate
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.ThreadPoolExecutor
 
 @RunWith(AndroidJUnit4::class)
 class StockerHomeTest {
@@ -93,18 +95,36 @@ class StockerHomeTest {
         val started = CountDownLatch(1)
         val release = CountDownLatch(1)
         val loaded = CountDownLatch(1)
+        val completed = CountDownLatch(2)
+        val worker = object : ThreadPoolExecutor(2, 2, 0L, TimeUnit.SECONDS, LinkedBlockingQueue()) {
+            override fun afterExecute(task: Runnable, error: Throwable?) {
+                super.afterExecute(task, error)
+                completed.countDown()
+            }
+        }
         val store = ViewModelStore()
         lateinit var vm: StockerHomeViewModel
         instrumentation.runOnMainSync {
             vm = StockerHomeViewModel(StockerHomeRepository { userId ->
                 if (userId == "old") {
                     started.countDown()
-                    check(release.await(5, TimeUnit.SECONDS))
+                    // Simulate a blocking dependency that does not support cancellation.
+                    val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(15)
+                    while (release.count > 0) {
+                        try {
+                            check(release.await((deadline - System.nanoTime()).coerceAtLeast(0), TimeUnit.NANOSECONDS))
+                        } catch (_: InterruptedException) {
+                            // Keep the old call blocked until the new account has loaded.
+                        }
+                    }
                 }
                 DemoStockerHomeRepository().load(userId).copy(pendingThisWeek = if (userId == "old") 99 else 7)
-            })
+            }, worker)
             store.put("home", vm)
-            vm.state.observeForever { if (it.data?.pendingThisWeek == 7) loaded.countDown() }
+            vm.state.observeForever {
+                assertNotEquals("An old account result must never be published", 99, it.data?.pendingThisWeek)
+                if (it.data?.pendingThisWeek == 7) loaded.countDown()
+            }
             vm.load("old")
         }
         try {
@@ -114,11 +134,56 @@ class StockerHomeTest {
                 assertNull(vm.state.value?.data)
                 vm.load("new")
             }
+            assertTrue("The new account must load while the old request is blocked", loaded.await(5, TimeUnit.SECONDS))
             release.countDown()
-            assertTrue(loaded.await(5, TimeUnit.SECONDS))
+            assertTrue(completed.await(5, TimeUnit.SECONDS))
             instrumentation.runOnMainSync { assertEquals(7, vm.state.value?.data?.pendingThisWeek) }
         } finally {
             release.countDown()
+            instrumentation.runOnMainSync { store.clear() }
+        }
+    }
+
+    @Test fun repositoryFailureCanBeRetriedForTheSameAccount() {
+        val failed = CountDownLatch(1)
+        val loaded = CountDownLatch(1)
+        val store = ViewModelStore()
+        val states = mutableListOf<StockerHomeUiState>()
+        var calls = 0
+        lateinit var vm: StockerHomeViewModel
+        instrumentation.runOnMainSync {
+            vm = StockerHomeViewModel(StockerHomeRepository { userId ->
+                if (++calls == 1) throw IllegalStateException("Temporary failure")
+                DemoStockerHomeRepository().load(userId)
+            })
+            store.put("home", vm)
+            vm.state.observeForever {
+                states.add(it)
+                if (it.failed) failed.countDown()
+                if (it.data != null) loaded.countDown()
+            }
+        }
+        try {
+            instrumentation.runOnMainSync { vm.load("demo") }
+            assertTrue(failed.await(5, TimeUnit.SECONDS))
+            instrumentation.runOnMainSync {
+                assertEquals(StockerHomeUiState(failed = true), vm.state.value)
+                vm.load("demo", force = true)
+            }
+            assertTrue(loaded.await(5, TimeUnit.SECONDS))
+            instrumentation.runOnMainSync {
+                assertEquals(2, calls)
+                assertEquals(listOf(
+                    StockerHomeUiState(),
+                    StockerHomeUiState(loading = true),
+                    StockerHomeUiState(failed = true),
+                    StockerHomeUiState(loading = true),
+                    vm.state.value
+                ), states)
+                assertNotNull(vm.state.value?.data)
+                assertFalse(vm.state.value!!.failed)
+            }
+        } finally {
             instrumentation.runOnMainSync { store.clear() }
         }
     }
