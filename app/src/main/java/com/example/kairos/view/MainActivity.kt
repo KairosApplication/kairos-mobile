@@ -19,6 +19,7 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.example.kairos.R
 import androidx.lifecycle.ViewModelProvider
 import com.example.kairos.model.auth.*
+import com.example.kairos.model.home.DemoStockerHomeRepository
 import com.example.kairos.viewmodel.*
 import java.time.LocalDate
 import java.time.format.DateTimeParseException
@@ -31,6 +32,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var progress: ProgressBar
     private lateinit var authEntry: AuthEntryView
     private lateinit var loadingView: LoadingView
+    private lateinit var homeView: StockerHomeView
+    private lateinit var homeVm: StockerHomeViewModel
     private lateinit var formScroll: ScrollView
     private val fields = linkedMapOf<String, EditText>()
     private val controls = mutableListOf<View>()
@@ -63,6 +66,7 @@ class MainActivity : AppCompatActivity() {
             ?.coerceIn(onboardingPages.indices) ?: 0
         enableEdgeToEdge()
         vm = ViewModelProvider(this, AuthViewModel.Factory(AuthDependencies.repository(applicationContext)))[AuthViewModel::class.java]
+        homeVm = ViewModelProvider(this, StockerHomeViewModel.Factory(DemoStockerHomeRepository()))[StockerHomeViewModel::class.java]
         val scroll = ScrollView(this)
         formScroll = scroll
         form = LinearLayout(this).apply {
@@ -75,6 +79,10 @@ class MainActivity : AppCompatActivity() {
         root.addView(scroll, FrameLayout.LayoutParams(-1, -1))
         authEntry = AuthEntryView(this, vm)
         root.addView(authEntry, FrameLayout.LayoutParams(-1, -1))
+        homeView = StockerHomeView(this, onRetry = {
+            vm.state.value?.user?.let { homeVm.load(it.uid, force = true) }
+        }, onLogout = vm::logout).apply { visibility = View.GONE }
+        root.addView(homeView, FrameLayout.LayoutParams(-1, -1))
         loadingView = LoadingView(this).apply { visibility = View.GONE }
         root.addView(loadingView, FrameLayout.LayoutParams(-1, -1))
         setContentView(root)
@@ -91,9 +99,15 @@ class MainActivity : AppCompatActivity() {
             fields.forEach { (key, field) -> saved.getString(key)?.let { field.setText(it) } }
         }
         authEntry.restore(savedInstanceState?.getBundle("authEntry"))
+        homeView.restore(savedInstanceState?.getBundle("home"))
+        homeVm.state.observe(this) { homeView.bind(it) }
         vm.state.observe(this) { state ->
             if (renderedScreen != state.screen) render(state)
             authEntry.update(state)
+            if (state.screen == AuthScreen.HOME) {
+                homeView.updateSession(state.user, state.loading, state.message)
+                state.user?.let { homeVm.load(it.uid) }
+            }
             if (formScroll.visibility == View.VISIBLE) {
                 message.text = state.message
                 progress.visibility = if (state.loading) View.VISIBLE else View.GONE
@@ -112,6 +126,10 @@ class MainActivity : AppCompatActivity() {
                     return
                 }
                 if (vm.state.value?.loading == true) return
+                if (vm.state.value?.screen == AuthScreen.HOME) {
+                    if (!homeView.handleBack()) finish()
+                    return
+                }
                 if (vm.state.value?.screen == AuthScreen.LOGIN) finish()
                 else vm.navigate(AuthScreen.LOGIN)
             }
@@ -120,6 +138,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putBundle("authEntry", authEntry.save())
+        outState.putBundle("home", homeView.save())
         outState.putBoolean("splashCompleted", splashCompleted)
         outState.putBoolean("onboardingCompleted", onboardingCompleted)
         outState.putInt("onboardingPage", onboardingPage)
@@ -222,7 +241,13 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        homeView.refreshDate()
+    }
+
     override fun onDestroy() {
+        homeView.close()
         authEntry.close()
         dismissSplash?.let { splashRoot?.removeCallbacks(it) }
         splashView?.animate()?.withEndAction(null)?.cancel()
@@ -255,15 +280,29 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun render(state: AuthUiState) {
+        if (renderedScreen == AuthScreen.HOME && state.screen != AuthScreen.HOME) {
+            homeVm.reset()
+            homeView.reset()
+        }
         renderedScreen = state.screen
+        val isHome = state.screen == AuthScreen.HOME
         val isEntry = state.screen == AuthScreen.LOGIN || state.screen == AuthScreen.REGISTER
         val isLoading = state.screen == AuthScreen.LOADING
         WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars =
-            !isEntry && !isLoading && (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK !=
+            !isEntry && !isLoading && !isHome && (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK !=
                 android.content.res.Configuration.UI_MODE_NIGHT_YES)
         authEntry.visibility = if (isEntry) View.VISIBLE else View.GONE
-        formScroll.visibility = if (isEntry || isLoading) View.GONE else View.VISIBLE
+        formScroll.visibility = if (isEntry || isLoading || isHome) View.GONE else View.VISIBLE
+        homeView.visibility = if (isHome) View.VISIBLE else View.GONE
         loadingView.visibility = if (isLoading) View.VISIBLE else View.GONE
+        if (isHome) {
+            authEntry.close()
+            fields.clear()
+            controls.clear()
+            homeView.updateSession(state.user, state.loading, state.message)
+            state.user?.let { homeVm.load(it.uid) }
+            return
+        }
         if (isLoading) {
             (getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager)
                 .hideSoftInputFromWindow(window.decorView.windowToken, 0)
@@ -326,10 +365,7 @@ class MainActivity : AppCompatActivity() {
                 field("email", "Email cadastrado", emailType)
                 button("Enviar link de recuperação") { vm.requestResetLink(value("email").trim()) }
             }
-            AuthScreen.HOME -> {
-                form.addView(TextView(this).apply { text = state.user?.email.orEmpty() })
-                button("Sair") { vm.logout() }
-            }
+            AuthScreen.HOME -> Unit // Rendered by StockerHomeView.
         }
         if (state.screen !in listOf(AuthScreen.LOGIN, AuthScreen.HOME)) {
             button("Voltar ao login") { vm.navigate(AuthScreen.LOGIN) }
