@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- O frame do Figma sobrepõe dois retângulos brancos ao SVG preenchido. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@drawable/menu_clock_active" />
+    <item android:width="2dp" android:height="9dp" android:gravity="center" android:top="-7dp">
+        <shape><solid android:color="#FFFFFF" /><corners android:radius="100dp" /></shape>
+    </item>
+    <item android:width="9dp" android:height="2dp" android:gravity="center" android:left="7dp">
+        <shape><solid android:color="#FFFFFF" /><corners android:radius="100dp" /></shape>
+    </item>
+</layer-list>

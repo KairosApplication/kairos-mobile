@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="restocking_alerts_title">Alertas de reposições</string>
+    <string name="restocking_history_title">Histórico de reposições</string>
+    <string name="restocking_pending">Pendências e avisos</string>
+    <string name="restocking_recent">Concluídas recentemente</string>
+    <string name="restocking_required">Precisa de reposição!</string>
+    <string name="restocking_low">Produto com baixo estoque</string>
+    <string name="restocking_done">Concluída!</string>
+    <string name="restocking_empty_recent">Nenhuma reposição concluída recentemente.</string>
+    <string name="history_search">Buscar produto</string>
+    <string name="history_filters">Filtrar histórico</string>
+    <string name="history_filters_active">Filtrar histórico (filtros ativos)</string>
+    <string name="history_period">Período</string>
+    <string name="history_all_dates">Todo o período</string>
+    <string name="history_today">Hoje</string>
+    <string name="history_last_seven">Últimos 7 dias</string>
+    <string name="history_shelf">Gôndola</string>
+    <string name="history_all_shelves">Todas as gôndolas</string>
+    <string name="history_order">Ordenação</string>
+    <string name="history_newest">Mais recentes primeiro</string>
+    <string name="history_oldest">Mais antigas primeiro</string>
+    <string name="history_apply">Aplicar</string>
+    <string name="history_clear">Limpar filtros</string>
+    <string name="history_cancel">Cancelar</string>
+    <string name="history_no_results">Nenhuma reposição encontrada. Altere a busca ou os filtros.</string>
+    <string name="history_empty">Nenhuma reposição no histórico.</string>
+    <string name="history_active_summary">%1$s · %2$s · %3$s</string>
+    <plurals name="history_result_count">
+        <item quantity="one">%d reposição encontrada</item>
+        <item quantity="other">%d reposições encontradas</item>
+    </plurals>
+    <item name="history_search" type="id" />
+    <item name="history_filter" type="id" />
+    <item name="history_results" type="id" />
+    <item name="history_period" type="id" />
+    <item name="history_shelf" type="id" />
+    <item name="history_order" type="id" />
+    <item name="home_nav_indicator" type="id" />
+</resources>
