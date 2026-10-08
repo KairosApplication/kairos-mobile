@@ -37,8 +37,10 @@ e [Histórico](https://www.figma.com/design/OFMvU7yImxJFUpV7e061Pj?node-id=713-1
   sem distinguir acentos ou maiúsculas. O botão de filtro combina período
   (todo, hoje, ontem ou últimos sete dias), gôndola e ordenação. Aplicar confirma
   as escolhas, Cancelar preserva o filtro anterior e Limpar filtros também limpa
-  a busca. As escolhas persistem entre abas e na recriação da atividade, mas
-  são apagadas quando a sessão é reiniciada.
+  a busca. As escolhas persistem entre abas e na recriação da atividade para
+  o mesmo UID. O bundle aguarda a confirmação da identidade antes de restaurar
+  a aba e os filtros. Uma conta diferente, logout ou um bundle antigo sem UID
+  descarta o estado; mudanças no perfil da mesma conta preservam os filtros.
 - Os registros são exemplos locais em `restockingAlerts`/`restockingHistory`,
   separados dos eventos agregados da Home. O adaptador futuro preencherá essas
   listas sem depender de recursos Android no modelo.
@@ -80,5 +82,8 @@ por callback, erro/nova tentativa, estado vazio e descarte de respostas de uma
 conta anterior. O teste de troca de conta mantém a consulta antiga bloqueada até
 a nova concluir e rejeita qualquer publicação do resultado antigo. Um teste
 adicional verifica a falha do repositório e a recuperação via retry forçado.
+O teste de restauração verifica a confirmação do UID, a preservação para a mesma
+conta e o descarte ao entrar com outra conta após uma falha de restauração,
+trocar de conta diretamente, sair ou receber um bundle antigo sem proprietário.
 O teste de interface usa uma sessão local de exemplo e não faz
 login ou logout de uma conta real.

@@ -117,6 +117,7 @@ class StockerHomeView(
     }
     private var indicatorReady = false
     private var historyFilter = HistoryFilter()
+    private var pendingRestoredState: Bundle? = null
     private var historyResults: LinearLayout? = null
     private var filterButton: FrameLayout? = null
     private var tab = Tab.START
@@ -178,7 +179,9 @@ class StockerHomeView(
     }
 
     fun updateSession(value: SignedInUser?, busy: Boolean, message: String) {
-        if (user == value && signingOut == busy && sessionMessage == message) return
+        if (user != null && user?.uid != value?.uid) reset()
+        val restored = applyRestoredState(value?.uid)
+        if (!restored && user == value && signingOut == busy && sessionMessage == message) return
         user = value
         signingOut = busy
         sessionMessage = message
@@ -186,7 +189,9 @@ class StockerHomeView(
     }
 
     fun refreshDate() { if (visibility == VISIBLE) render() }
-    fun save() = Bundle().apply {
+    // Keep the pending owner when recreation happens before authentication finishes.
+    fun save(): Bundle = pendingRestoredState?.let { Bundle(it) } ?: Bundle().apply {
+        putString("ownerUid", user?.uid)
         putString("tab", tab.name)
         putString("historyQuery", historyFilter.query)
         putString("historyPeriod", historyFilter.period.name)
@@ -194,26 +199,49 @@ class StockerHomeView(
         putBoolean("historyOldestFirst", historyFilter.oldestFirst)
     }
     fun restore(saved: Bundle?) {
-        tab = Tab.entries.firstOrNull { it.name == saved?.getString("tab") } ?: Tab.START
-        historyFilter = HistoryFilter(
-            saved?.getString("historyQuery").orEmpty(),
-            HistoryPeriod.entries.firstOrNull { it.name == saved?.getString("historyPeriod") } ?: HistoryPeriod.ALL,
-            saved?.getString("historyShelf"), saved?.getBoolean("historyOldestFirst") ?: false)
+        close()
+        tab = Tab.START
+        historyFilter = HistoryFilter()
+        pendingRestoredState = saved?.takeIf { !it.getString("ownerUid").isNullOrBlank() }?.let { Bundle(it) }
         indicatorReady = false
+        applyRestoredState(user?.uid)
         render()
     }
 
-    fun reset() {
-        close()
-        user = null
-        tab = Tab.START
-        historyFilter = HistoryFilter()
+    private fun applyRestoredState(uid: String?): Boolean {
+        val saved = pendingRestoredState ?: return false
+        if (uid == null) return false
+        pendingRestoredState = null
+        if (saved.getString("ownerUid") != uid) {
+            clearAccountUi()
+            return true
+        }
+        tab = Tab.entries.firstOrNull { it.name == saved.getString("tab") } ?: Tab.START
+        historyFilter = HistoryFilter(
+            saved.getString("historyQuery").orEmpty(),
+            HistoryPeriod.entries.firstOrNull { it.name == saved.getString("historyPeriod") } ?: HistoryPeriod.ALL,
+            saved.getString("historyShelf"), saved.getBoolean("historyOldestFirst"))
         indicatorReady = false
-        navIndicator.animate().cancel()
+        return true
+    }
+
+    fun reset() {
+        clearAccountUi()
+        user = null
         signingOut = false
         sessionMessage = ""
-        state = StockerHomeUiState()
         render()
+    }
+
+    private fun clearAccountUi() {
+        close()
+        tab = Tab.START
+        historyFilter = HistoryFilter()
+        pendingRestoredState = null
+        indicatorReady = false
+        navIndicator.animate().cancel()
+        state = StockerHomeUiState()
+        scroll.scrollTo(0, 0)
     }
 
     fun handleBack(): Boolean {

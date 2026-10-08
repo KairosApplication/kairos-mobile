@@ -41,6 +41,9 @@ import java.util.concurrent.ThreadPoolExecutor
 @RunWith(AndroidJUnit4::class)
 class StockerHomeTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
+    private fun demoUser(uid: String = "demo") = SignedInUser(uid, "$uid@example.com", UserProfile(
+        uid, "João", "Silva", LocalDate.of(1990, 1, 1), "", "$uid@example.com", "", ""
+    ))
     private fun texts(view: View): List<TextView> = when (view) {
         is TextView -> listOf(view)
         is ViewGroup -> (0 until view.childCount).flatMap { texts(view.getChildAt(it)) }
@@ -67,6 +70,7 @@ class StockerHomeTest {
             var startX = 0f
             scenario.onActivity { activity ->
                 home = StockerHomeView(activity, {}, {})
+                home.updateSession(demoUser(), false, "")
                 home.bind(StockerHomeUiState(data = DemoStockerHomeRepository().load("demo")))
                 activity.setContentView(home)
             }
@@ -114,6 +118,7 @@ class StockerHomeTest {
                 val saved = home.save()
                 val replacement = StockerHomeView(it, {}, {})
                 replacement.restore(saved)
+                replacement.updateSession(demoUser(), false, "")
                 replacement.bind(StockerHomeUiState(data = DemoStockerHomeRepository().load("demo")))
                 it.setContentView(replacement)
                 home = replacement
@@ -178,6 +183,7 @@ class StockerHomeTest {
                 val saved = home.save()
                 home.reset()
                 home.restore(saved)
+                home.updateSession(demoUser(), false, "")
                 assertTrue(home.findViewById<View>(R.id.home_nav_history).isSelected)
                 home.findViewById<View>(R.id.home_nav_config).performClick()
                 home.findViewById<View>(R.id.home_logout).performClick()
@@ -189,6 +195,97 @@ class StockerHomeTest {
                 val empty = DemoStockerHomeRepository().load("demo").copy(priorities = emptyList())
                 home.bind(StockerHomeUiState(data = empty))
                 assertTrue(texts(home).any { it.text.toString() == "Nenhuma prioridade no momento." })
+            }
+        }
+    }
+
+    @Test fun restoredFiltersWaitForTheirOwnerAndAreDiscardedForAnotherAccount() {
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            SystemClock.sleep(2800)
+            lateinit var home: StockerHomeView
+            scenario.onActivity { activity ->
+                home = StockerHomeView(activity, {}, {})
+                home.updateSession(demoUser("account-a"), false, "")
+                home.bind(StockerHomeUiState(data = DemoStockerHomeRepository().load("account-a")))
+                activity.setContentView(home)
+                home.findViewById<View>(R.id.home_nav_history).performClick()
+                home.findViewById<EditText>(R.id.history_search).setText("agua")
+                home.findViewById<View>(R.id.history_filter).performClick()
+            }
+            onView(withId(R.id.history_period)).perform(click())
+            onData(equalTo("Ontem")).inRoot(isPlatformPopup()).perform(click())
+            onView(withId(R.id.history_shelf)).perform(click())
+            onData(equalTo("C03")).inRoot(isPlatformPopup()).perform(click())
+            onView(withId(R.id.history_order)).perform(click())
+            onData(equalTo("Mais antigas primeiro")).inRoot(isPlatformPopup()).perform(click())
+            onView(withText("Aplicar")).perform(click())
+            scenario.onActivity { activity ->
+                val saved = home.save()
+                assertEquals("account-a", saved.getString("ownerUid"))
+                assertEquals("YESTERDAY", saved.getString("historyPeriod"))
+                assertEquals("C03", saved.getString("historyShelf"))
+                assertTrue(saved.getBoolean("historyOldestFirst"))
+
+                val recreated = StockerHomeView(activity, {}, {})
+                recreated.restore(saved)
+                assertTrue(recreated.findViewById<View>(R.id.home_nav_start).isSelected)
+                assertNull(recreated.findViewById<EditText>(R.id.history_search))
+                // A failed restore leaves the identity unknown; recreating again must keep the owner.
+                recreated.updateSession(null, false, "Falha ao restaurar sessão")
+                val savedWhileUnauthenticated = recreated.save()
+                assertEquals("account-a", savedWhileUnauthenticated.getString("ownerUid"))
+
+                val sameAccount = StockerHomeView(activity, {}, {})
+                sameAccount.restore(savedWhileUnauthenticated)
+                sameAccount.updateSession(demoUser("account-a"), false, "")
+                sameAccount.bind(StockerHomeUiState(data = DemoStockerHomeRepository().load("account-a")))
+                assertTrue(sameAccount.findViewById<View>(R.id.home_nav_history).isSelected)
+                assertEquals("agua", sameAccount.findViewById<EditText>(R.id.history_search).text.toString())
+                assertEquals(1, texts(sameAccount.findViewById(R.id.history_results)).count { it.text.toString() == "Concluída!" })
+                assertEquals("YESTERDAY", sameAccount.save().getString("historyPeriod"))
+                assertEquals("C03", sameAccount.save().getString("historyShelf"))
+                assertTrue(sameAccount.save().getBoolean("historyOldestFirst"))
+                sameAccount.updateSession(demoUser("account-a").copy(email = "updated@example.com"), false, "")
+                assertEquals("agua", sameAccount.findViewById<EditText>(R.id.history_search).text.toString())
+
+                fun assertFreshAccount(view: StockerHomeView, uid: String) {
+                    assertTrue(view.findViewById<View>(R.id.home_nav_start).isSelected)
+                    val state = view.save()
+                    assertEquals(uid, state.getString("ownerUid"))
+                    assertEquals("", state.getString("historyQuery"))
+                    assertEquals("ALL", state.getString("historyPeriod"))
+                    assertNull(state.getString("historyShelf"))
+                    assertFalse(state.getBoolean("historyOldestFirst"))
+                    view.bind(StockerHomeUiState(data = DemoStockerHomeRepository().load(uid)))
+                    view.findViewById<View>(R.id.home_nav_history).performClick()
+                    assertEquals("", view.findViewById<EditText>(R.id.history_search).text.toString())
+                    assertFalse(view.findViewById<View>(R.id.history_filter).isSelected)
+                    assertEquals(6, texts(view.findViewById(R.id.history_results)).count { it.text.toString() == "Concluída!" })
+                }
+
+                // Reproduces LOGIN -> HOME with B after process recreation and failed restoration of A.
+                val differentAccount = StockerHomeView(activity, {}, {})
+                differentAccount.restore(savedWhileUnauthenticated)
+                differentAccount.updateSession(demoUser("account-b"), false, "")
+                assertFreshAccount(differentAccount, "account-b")
+                differentAccount.restore(saved)
+                assertFreshAccount(differentAccount, "account-b")
+
+                // A direct account change must also clear the data already bound to the previous account.
+                sameAccount.updateSession(demoUser("account-b"), false, "")
+                assertFalse(texts(sameAccount).any { it.text.toString() == "Água Mineral" })
+                assertFreshAccount(sameAccount, "account-b")
+
+                val legacy = StockerHomeView(activity, {}, {})
+                legacy.restore(android.os.Bundle(saved).apply { remove("ownerUid") })
+                legacy.updateSession(demoUser("account-a"), false, "")
+                assertFreshAccount(legacy, "account-a")
+
+                val loggedOut = StockerHomeView(activity, {}, {})
+                loggedOut.restore(saved)
+                loggedOut.reset()
+                loggedOut.updateSession(demoUser("account-a"), false, "")
+                assertFreshAccount(loggedOut, "account-a")
             }
         }
     }
