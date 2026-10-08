@@ -19,8 +19,8 @@
     <string name="home_start">Início</string>
     <string name="home_alerts">Alertas</string>
     <string name="home_history">Histórico</string>
-    <string name="home_config_short">Config</string>
-    <string name="home_config">Configurações</string>
+    <string name="home_config_short">Ajustes</string>
+    <string name="home_config">Ajustes</string>
     <string name="home_demo">Dados de demonstração</string>
     <string name="home_demo_description">Os números, alertas e análises desta versão são exemplos e não representam o estoque real.</string>
     <string name="home_last_analysis">Última análise concluída</string>

@@ -5,14 +5,25 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.LinearGradient
 import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.Rect
+import android.graphics.RectF
+import android.graphics.ColorFilter
+import android.graphics.PixelFormat
 import android.graphics.Shader
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.Drawable
 import android.graphics.drawable.RippleDrawable
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
+import android.text.InputType
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.inputmethod.InputMethodManager
+import android.view.animation.AccelerateDecelerateInterpolator
 import android.widget.*
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -24,6 +35,10 @@ import com.example.kairos.R
 import com.example.kairos.model.auth.SignedInUser
 import com.example.kairos.model.home.HomeEvent
 import com.example.kairos.model.home.HomeEventType
+import com.example.kairos.model.home.HistoryFilter
+import com.example.kairos.model.home.HistoryPeriod
+import com.example.kairos.model.home.RestockingRecord
+import com.example.kairos.model.home.RestockingStatus
 import com.example.kairos.viewmodel.StockerHomeUiState
 import java.time.Duration
 import java.time.Instant
@@ -58,6 +73,24 @@ class StockerHomeView(
     private val locale = Locale.forLanguageTag("pt-BR")
     private val backdrop = Paint()
     private val statusBarPaint = Paint().apply { color = 0xFF0D6249.toInt() }
+    private val headerEdgePaint = Paint().apply { color = 0xFF0A6A4F.toInt() }
+    private val restockingBackground = object : Drawable() {
+        private val surface = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val shape = Path()
+        override fun onBoundsChange(bounds: Rect) {
+            surface.shader = LinearGradient(0f, bounds.top.toFloat(), 0f, bounds.bottom.toFloat(),
+                intArrayOf(0xFFE5EFEC.toInt(), 0xFFF4EFEF.toInt(), 0xFFDEDEDE.toInt()),
+                floatArrayOf(0f, .86538f, 1f), Shader.TileMode.CLAMP)
+            val radius = px(10f).toFloat()
+            shape.reset()
+            shape.addRoundRect(RectF(bounds), floatArrayOf(radius, radius, radius, radius, 0f, 0f, 0f, 0f), Path.Direction.CW)
+        }
+        override fun draw(canvas: Canvas) { canvas.drawPath(shape, surface) }
+        override fun setAlpha(alpha: Int) { surface.alpha = alpha; invalidateSelf() }
+        override fun setColorFilter(colorFilter: ColorFilter?) { surface.colorFilter = colorFilter; invalidateSelf() }
+        @Suppress("DEPRECATION")
+        override fun getOpacity() = PixelFormat.TRANSLUCENT
+    }
     private val body = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
     private val scroll = ScrollView(context).apply {
         isFillViewport = true
@@ -66,6 +99,26 @@ class StockerHomeView(
         addView(body)
     }
     private val nav = LinearLayout(context).apply { gravity = Gravity.CENTER_VERTICAL }
+    private val navFrame = FrameLayout(context)
+    private val navIndicator = View(context).apply {
+        id = R.id.home_nav_indicator
+        background = rounded(color(R.color.home_active), 50f)
+        importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
+    }
+    private val navIcons = mutableMapOf<Tab, ImageView>()
+    private val navLabels = mutableMapOf<Tab, TextView>()
+    private val sectionHeader by lazy {
+        label("", 24f, Color.WHITE).apply {
+            gravity = Gravity.CENTER
+            background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(0xFF0D6249.toInt(), 0xFF0A6A4F.toInt()))
+            ViewCompat.setAccessibilityHeading(this, true)
+        }
+    }
+    private var indicatorReady = false
+    private var historyFilter = HistoryFilter()
+    private var historyResults: LinearLayout? = null
+    private var filterButton: FrameLayout? = null
     private var tab = Tab.START
     private var user: SignedInUser? = null
     private var state = StockerHomeUiState()
@@ -79,12 +132,16 @@ class StockerHomeView(
         setWillNotDraw(false)
         val column = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
+            addView(sectionHeader, LinearLayout.LayoutParams(-1, px(80f)))
             addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
-            nav.background = rounded(color(R.color.home_nav), 20f)
-            addView(nav, LinearLayout.LayoutParams(-1, -2).apply {
-                setMargins(px(5f), 0, px(5f), px(5f))
+            navFrame.background = rounded(color(R.color.home_nav), 20f)
+            navFrame.addView(nav, LayoutParams(-1, -2))
+            navFrame.addView(navIndicator, LayoutParams(px(65f), px(4f), Gravity.BOTTOM or Gravity.START).apply {
+                bottomMargin = px(5f)
             })
+            addView(navFrame, LinearLayout.LayoutParams(-1, -2))
         }
+        nav.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> moveNavIndicator(false) }
         addView(column, LayoutParams(-1, -1))
         ViewCompat.setOnApplyWindowInsetsListener(this) { _, insets ->
             val safe = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
@@ -104,8 +161,12 @@ class StockerHomeView(
 
     override fun onDraw(canvas: Canvas) {
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), backdrop)
-        if (tab == Tab.START) {
+        if (tab != Tab.CONFIG) {
             canvas.drawRect(0f, 0f, width.toFloat(), topInset.toFloat(), statusBarPaint)
+        }
+        if (tab == Tab.ALERTS || tab == Tab.HISTORY) {
+            canvas.drawRect(0f, sectionHeader.bottom.toFloat(), width.toFloat(),
+                (sectionHeader.bottom + px(10f)).toFloat(), headerEdgePaint)
         }
         super.onDraw(canvas)
     }
@@ -125,9 +186,20 @@ class StockerHomeView(
     }
 
     fun refreshDate() { if (visibility == VISIBLE) render() }
-    fun save() = Bundle().apply { putString("tab", tab.name) }
+    fun save() = Bundle().apply {
+        putString("tab", tab.name)
+        putString("historyQuery", historyFilter.query)
+        putString("historyPeriod", historyFilter.period.name)
+        putString("historyShelf", historyFilter.shelfCode)
+        putBoolean("historyOldestFirst", historyFilter.oldestFirst)
+    }
     fun restore(saved: Bundle?) {
         tab = Tab.entries.firstOrNull { it.name == saved?.getString("tab") } ?: Tab.START
+        historyFilter = HistoryFilter(
+            saved?.getString("historyQuery").orEmpty(),
+            HistoryPeriod.entries.firstOrNull { it.name == saved?.getString("historyPeriod") } ?: HistoryPeriod.ALL,
+            saved?.getString("historyShelf"), saved?.getBoolean("historyOldestFirst") ?: false)
+        indicatorReady = false
         render()
     }
 
@@ -135,6 +207,9 @@ class StockerHomeView(
         close()
         user = null
         tab = Tab.START
+        historyFilter = HistoryFilter()
+        indicatorReady = false
+        navIndicator.animate().cancel()
         signingOut = false
         sessionMessage = ""
         state = StockerHomeUiState()
@@ -152,10 +227,18 @@ class StockerHomeView(
         super.onAttachedToWindow()
         ViewCompat.requestApplyInsets(this)
     }
-    override fun onDetachedFromWindow() { close(); super.onDetachedFromWindow() }
+    override fun onDetachedFromWindow() {
+        close()
+        navIndicator.animate().cancel()
+        navIcons.values.forEach { it.animate().cancel() }
+        super.onDetachedFromWindow()
+    }
 
     private fun select(value: Tab) {
-        if (signingOut) return
+        if (signingOut || tab == value) return
+        close()
+        (context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as InputMethodManager)
+            .hideSoftInputFromWindow(windowToken, 0)
         tab = value
         render()
         scroll.scrollTo(0, 0)
@@ -203,17 +286,21 @@ class StockerHomeView(
     private fun render() {
         if (visibility == VISIBLE) {
             WindowCompat.getInsetsController(activity.window, this).apply {
-                isAppearanceLightStatusBars = tab != Tab.START
+                isAppearanceLightStatusBars = tab == Tab.CONFIG
                 isAppearanceLightNavigationBars = true
             }
         }
+        val oldSearch = findViewById<EditText>(R.id.history_search)
+        val restoreSearchFocus = tab == Tab.HISTORY && oldSearch?.hasFocus() == true
+        val searchSelection = oldSearch?.selectionStart ?: 0
         body.removeAllViews()
+        historyResults = null
+        filterButton = null
         body.setPadding(0, 0, 0, px(20f))
-        if (tab == Tab.START) addHero() else heading(when (tab) {
-            Tab.ALERTS -> R.string.home_alerts
-            Tab.HISTORY -> R.string.home_history
-            else -> R.string.home_config
-        }, 32f)
+        sectionHeader.visibility = if (tab == Tab.ALERTS || tab == Tab.HISTORY) VISIBLE else GONE
+        sectionHeader.text = str(if (tab == Tab.ALERTS) R.string.restocking_alerts_title else R.string.restocking_history_title)
+        scroll.background = if (sectionHeader.visibility == VISIBLE) restockingBackground else null
+        if (tab == Tab.START) addHero() else if (tab == Tab.CONFIG) heading(R.string.home_config, 32f)
         if (tab == Tab.CONFIG) {
             renderAccount()
         } else if (state.loading || state.data == null && !state.failed) {
@@ -236,13 +323,17 @@ class StockerHomeView(
                     heading(R.string.home_priorities, 23f)
                     events(data.priorities, R.string.home_empty_priorities, firstGap = 28f)
                 }
-                Tab.ALERTS -> events(data.alerts, R.string.home_empty_alerts)
-                Tab.HISTORY -> events(data.history, R.string.home_empty_history)
+                Tab.ALERTS -> renderAlerts()
+                Tab.HISTORY -> renderHistory()
                 Tab.CONFIG -> Unit
             }
             if (data.isDemo) add(label(str(R.string.home_demo), 12f, secondary).apply { gravity = Gravity.CENTER }, 18f)
         }
         renderNav()
+        if (restoreSearchFocus) findViewById<EditText>(R.id.history_search)?.apply {
+            requestFocus()
+            setSelection(searchSelection.coerceIn(0, text.length))
+        }
         invalidate()
     }
 
@@ -371,30 +462,287 @@ class StockerHomeView(
     }
 
     private fun renderNav() {
-        nav.removeAllViews()
-        Tab.entries.forEach { item ->
-            val selected = tab == item
+        if (nav.childCount == 0) Tab.entries.forEach { item ->
             val column = LinearLayout(context).apply {
                 id = item.viewId
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
                 minimumHeight = px(76f).coerceAtLeast((48 * density).toInt())
                 setPadding(0, px(9f), 0, px(8f))
-                isSelected = selected
                 isFocusable = true
                 contentDescription = str(if (item == Tab.CONFIG) R.string.home_config else item.label)
                 background = RippleDrawable(ColorStateList.valueOf(0x14266D57), null, rounded(Color.WHITE, 20f))
                 setOnClickListener { select(item) }
             }
-            column.addView(icon(item.icon), LinearLayout.LayoutParams(px(32f), px(33f)))
-            column.addView(label(str(item.label), 12f, color(R.color.home_green)),
+            val image = icon(item.icon).also { navIcons[item] = it; it.tag = item.icon }
+            column.addView(image, LinearLayout.LayoutParams(px(32f), px(33f)))
+            val caption = label(str(item.label), 12f, color(R.color.home_green)).also { navLabels[item] = it }
+            column.addView(caption,
                 LinearLayout.LayoutParams(-2, -2).apply { topMargin = px(3f) })
-            column.addView(View(context).apply {
-                background = rounded(color(R.color.home_active), 50f)
-                visibility = if (selected) VISIBLE else INVISIBLE
-            }, LinearLayout.LayoutParams(px(54f), px(3f)).apply { topMargin = px(6f) })
             nav.addView(column, LinearLayout.LayoutParams(0, -2, 1f))
         }
+        Tab.entries.forEach { item ->
+            val selected = tab == item
+            findViewById<View>(item.viewId).apply { isSelected = selected; isEnabled = !signingOut }
+            navLabels[item]?.typeface = Typeface.create(montserrat, if (selected) 700 else 500, false)
+            navLabels[item]?.fontVariationSettings = "'wght' ${if (selected) 700 else 500}"
+            val resource = when {
+                item == Tab.START && selected -> R.drawable.menu_house_active
+                item == Tab.CONFIG && selected -> R.drawable.menu_settings_active
+                item == Tab.ALERTS && selected -> R.drawable.menu_bell_active
+                item == Tab.ALERTS -> R.drawable.menu_bell
+                item == Tab.HISTORY && selected -> R.drawable.menu_clock_selected
+                else -> item.icon
+            }
+            navIcons[item]?.let { image ->
+                if (image.tag != resource) {
+                    image.tag = resource
+                    image.animate().withEndAction(null).cancel()
+                    image.setImageResource(resource)
+                    if (indicatorReady && isAttachedToWindow) {
+                        image.alpha = .65f
+                        image.animate().alpha(1f).setDuration(180).withEndAction(null).start()
+                    } else {
+                        image.alpha = 1f
+                    }
+                }
+            }
+        }
+        moveNavIndicator(true)
+    }
+
+    private fun moveNavIndicator(animate: Boolean) {
+        val selected = nav.findViewById<View>(tab.viewId) ?: return
+        if (selected.width == 0) return
+        val indicatorWidth = navIndicator.layoutParams.width
+        val physicalLeft = nav.left + selected.left + (selected.width - indicatorWidth) / 2f
+        val target = physicalLeft - if (navFrame.layoutDirection == LAYOUT_DIRECTION_RTL) navFrame.width - indicatorWidth else 0
+        if (animate && indicatorReady) {
+            navIndicator.animate().translationX(target).setDuration(280)
+                .setInterpolator(AccelerateDecelerateInterpolator()).start()
+        } else {
+            navIndicator.animate().cancel()
+            navIndicator.translationX = target
+        }
+        indicatorReady = true
+    }
+
+    private fun sectionLabel(text: String, top: Float, parent: LinearLayout = body) {
+        parent.addView(label(text, 20f, 0xCC0F2B21.toInt()).apply {
+            ViewCompat.setAccessibilityHeading(this, true)
+        }, LinearLayout.LayoutParams(-1, -2).apply { setMargins(px(25f), px(top), px(19f), 0) })
+    }
+
+    private fun renderAlerts() {
+        val data = state.data ?: return
+        sectionLabel(str(R.string.restocking_pending), 24f)
+        if (data.restockingAlerts.isEmpty()) add(label(str(R.string.home_empty_alerts), 16f, secondary), 12f)
+        data.restockingAlerts.forEach { add(productCard(it), 10f) }
+        sectionLabel(str(R.string.restocking_recent), 16f)
+        val today = LocalDate.now()
+        val completed = HistoryFilter(period = HistoryPeriod.TODAY)
+            .apply(data.restockingHistory, today, ZoneId.systemDefault())
+        if (completed.isEmpty()) add(label(str(R.string.restocking_empty_recent), 16f, secondary), 12f)
+        completed.take(2).forEach { add(productCard(it), 10f) }
+    }
+
+    private fun productCard(record: RestockingRecord): View {
+        val (statusColor, statusText, statusIcon) = when (record.status) {
+            RestockingStatus.REQUIRED -> Triple(0xFFDE3129.toInt(), R.string.restocking_required, R.drawable.home_stop)
+            RestockingStatus.LOW_STOCK -> Triple(0xFFE8A825.toInt(), R.string.restocking_low, R.drawable.home_warning)
+            RestockingStatus.COMPLETED -> Triple(0xFF05843B.toInt(), R.string.restocking_done, R.drawable.home_check)
+        }
+        val date = record.occurredAt.atZone(ZoneId.systemDefault())
+        val elapsed = Duration.between(record.occurredAt, Instant.now()).toMinutes()
+        val time = if (date.toLocalDate() == LocalDate.now() && elapsed in 0..59) relativeTime(record.occurredAt)
+            else date.format(DateTimeFormatter.ofPattern("HH:mm", locale))
+        val subtitle = str(R.string.home_event_subtitle, record.shelfCode, time)
+        val row = LinearLayout(context).apply {
+            minimumHeight = px(92f)
+            gravity = Gravity.CENTER_VERTICAL
+            clipToOutline = true
+            contentDescription = "${record.productName}. $subtitle. ${str(statusText)}"
+        }
+        card(row) { showInfo(record.productName, "$subtitle\n${str(statusText)}") }
+        val thumbnail = FrameLayout(context).apply {
+            background = rounded(Color.WHITE, 20f, true)
+            val image = when (record.imageKey) {
+                "cola" -> R.drawable.restock_cola
+                "biscuits" -> R.drawable.restock_biscuits
+                "water" -> R.drawable.restock_water
+                else -> R.drawable.home_camera
+            }
+            addView(icon(image).apply { if (record.imageKey == "biscuits") rotation = -15f },
+                LayoutParams(px(if (record.imageKey == "biscuits") 57f else 53f),
+                    px(if (record.imageKey == "biscuits") 57f else 53f), Gravity.CENTER))
+        }
+        row.addView(thumbnail, LinearLayout.LayoutParams(px(74f), px(73f)).apply {
+            setMargins(px(10f), px(9f), 0, px(9f))
+        })
+        row.addView(LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(px(15f), px(12f), px(6f), px(12f))
+            addView(label(record.productName, 15.5f))
+            addView(label(subtitle, 14f, 0xFF617D70.toInt()).apply {
+                typeface = Typeface.create(montserrat, 400, false)
+                fontVariationSettings = "'wght' 400"
+            }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(4f) })
+            addView(label(str(statusText), 14f, statusColor),
+                LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(3f) })
+        }, LinearLayout.LayoutParams(0, -2, 1f))
+        val colors = when (record.status) {
+            RestockingStatus.REQUIRED -> intArrayOf(0xFFDE4138.toInt(), 0xFFE0382E.toInt())
+            RestockingStatus.LOW_STOCK -> intArrayOf(0xFFE0AB3D.toInt(), 0xFFE8A825.toInt())
+            RestockingStatus.COMPLETED -> intArrayOf(0xFF0C8449.toInt(), 0xFF0A874A.toInt())
+        }
+        row.addView(FrameLayout(context).apply {
+            background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, colors)
+            addView(icon(statusIcon), LayoutParams(px(21f), px(21f), Gravity.CENTER))
+        }, LinearLayout.LayoutParams(px(55f), -1))
+        return row
+    }
+
+    private fun renderHistory() {
+        val searchBar = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            minimumHeight = px(62f).coerceAtLeast((48 * density).toInt())
+            setPadding(px(24f), px(5f), px(10f), px(5f))
+            background = rounded(Color.WHITE, 100f, true)
+            elevation = px(5f).toFloat()
+            outlineAmbientShadowColor = 0x1A05291A
+            outlineSpotShadowColor = 0x1A05291A
+        }
+        searchBar.addView(icon(R.drawable.menu_search), LinearLayout.LayoutParams(px(30f), px(30f)))
+        val search = EditText(context).apply {
+            id = R.id.history_search
+            hint = str(R.string.history_search)
+            contentDescription = str(R.string.history_search)
+            textSize = 15.5f * scale
+            typeface = Typeface.create(montserrat, 500, false)
+            fontVariationSettings = "'wght' 500"
+            setTextColor(ink)
+            setHintTextColor(0xFF636F6A.toInt())
+            background = null
+            inputType = InputType.TYPE_CLASS_TEXT
+            isSingleLine = true
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
+            setPadding(px(20f), 0, px(8f), 0)
+            setText(historyFilter.query)
+            setOnEditorActionListener { _, action, _ ->
+                if (action == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH) {
+                    clearFocus()
+                    (context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as InputMethodManager)
+                        .hideSoftInputFromWindow(windowToken, 0)
+                    true
+                } else false
+            }
+            addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                    historyFilter = historyFilter.copy(query = s?.toString().orEmpty())
+                    renderHistoryResults()
+                }
+                override fun afterTextChanged(s: Editable?) = Unit
+            })
+        }
+        searchBar.addView(search, LinearLayout.LayoutParams(0, -1, 1f))
+        filterButton = FrameLayout(context).apply {
+            id = R.id.history_filter
+            isFocusable = true
+            addView(icon(R.drawable.menu_filter), LayoutParams(px(20f), px(20f), Gravity.CENTER))
+            setOnClickListener { if (!signingOut) showHistoryFilters() }
+        }
+        searchBar.addView(filterButton, LinearLayout.LayoutParams(px(48f), px(48f)))
+        add(searchBar, 23f)
+        historyResults = LinearLayout(context).apply {
+            id = R.id.history_results
+            orientation = LinearLayout.VERTICAL
+        }
+        body.addView(historyResults, LinearLayout.LayoutParams(-1, -2))
+        renderHistoryResults()
+    }
+
+    private fun periodLabels() = arrayOf(str(R.string.history_all_dates), str(R.string.history_today),
+        str(R.string.home_yesterday), str(R.string.history_last_seven))
+
+    private fun renderHistoryResults() {
+        val container = historyResults ?: return
+        container.removeAllViews()
+        val active = historyFilter.period != HistoryPeriod.ALL || historyFilter.shelfCode != null || historyFilter.oldestFirst
+        filterButton?.apply {
+            isSelected = active
+            contentDescription = str(if (active) R.string.history_filters_active else R.string.history_filters)
+            background = RippleDrawable(ColorStateList.valueOf(0x14266D57),
+                rounded(if (active) 0xFFD4E7DE.toInt() else 0xFFDBDBDB.toInt(), 100f), null)
+        }
+        if (active) container.addView(label(str(R.string.history_active_summary,
+            periodLabels()[historyFilter.period.ordinal], historyFilter.shelfCode ?: str(R.string.history_all_shelves),
+            str(if (historyFilter.oldestFirst) R.string.history_oldest else R.string.history_newest)), 12f, secondary),
+            LinearLayout.LayoutParams(-1, -2).apply { setMargins(px(25f), px(12f), px(19f), 0) })
+        val records = historyFilter.apply(state.data?.restockingHistory.orEmpty(), LocalDate.now(), ZoneId.systemDefault())
+        container.contentDescription = resources.getQuantityString(R.plurals.history_result_count, records.size, records.size)
+        if (records.isEmpty()) {
+            container.addView(label(str(if (historyFilter == HistoryFilter()) R.string.history_empty else R.string.history_no_results),
+                16f, secondary), LinearLayout.LayoutParams(-1, -2).apply { setMargins(px(25f), px(24f), px(19f), 0) })
+            return
+        }
+        records.groupBy { it.occurredAt.atZone(ZoneId.systemDefault()).toLocalDate() }.forEach { (date, group) ->
+            val title = when (date) {
+                LocalDate.now() -> str(R.string.history_today)
+                LocalDate.now().minusDays(1) -> str(R.string.home_yesterday)
+                else -> date.format(DateTimeFormatter.ofPattern("dd/MM/yyyy", locale))
+            }
+            sectionLabel(title, 16f, container)
+            group.forEach { record ->
+                container.addView(productCard(record), LinearLayout.LayoutParams(-1, -2).apply {
+                    setMargins(px(19f), px(10f), px(19f), 0)
+                })
+            }
+        }
+    }
+
+    private fun showHistoryFilters() {
+        close()
+        val panel = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(px(24f), px(12f), px(24f), px(12f))
+        }
+        fun choices(title: Int, viewId: Int, values: Array<String>, selected: Int): Spinner {
+            panel.addView(label(str(title), 16f), LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(12f) })
+            return Spinner(context, Spinner.MODE_DROPDOWN).apply {
+                id = viewId
+                adapter = object : ArrayAdapter<String>(context, android.R.layout.simple_spinner_item, values) {
+                    init { setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+                    override fun getView(position: Int, convertView: View?, parent: ViewGroup): View =
+                        super.getView(position, convertView, parent).also(::applyMontserrat)
+                    override fun getDropDownView(position: Int, convertView: View?, parent: ViewGroup): View =
+                        super.getDropDownView(position, convertView, parent).also(::applyMontserrat)
+                }
+                setSelection(selected)
+                panel.addView(this, LinearLayout.LayoutParams(-1, px(48f)))
+            }
+        }
+        val shelves = state.data?.restockingHistory.orEmpty().map { it.shelfCode }.distinct().sorted()
+        val shelfLabels = (listOf(str(R.string.history_all_shelves)) + shelves).toTypedArray()
+        val period = choices(R.string.history_period, R.id.history_period, periodLabels(), historyFilter.period.ordinal)
+        val shelf = choices(R.string.history_shelf, R.id.history_shelf, shelfLabels,
+            (shelves.indexOf(historyFilter.shelfCode) + 1).coerceAtLeast(0))
+        val order = choices(R.string.history_order, R.id.history_order,
+            arrayOf(str(R.string.history_newest), str(R.string.history_oldest)), if (historyFilter.oldestFirst) 1 else 0)
+        dialog = AlertDialog.Builder(activity).setTitle(R.string.history_filters).setView(panel)
+            .setPositiveButton(R.string.history_apply) { _, _ ->
+                historyFilter = historyFilter.copy(period = HistoryPeriod.entries[period.selectedItemPosition],
+                    shelfCode = shelves.getOrNull(shelf.selectedItemPosition - 1), oldestFirst = order.selectedItemPosition == 1)
+                renderHistoryResults()
+            }
+            .setNeutralButton(R.string.history_clear) { _, _ ->
+                historyFilter = HistoryFilter()
+                findViewById<EditText>(R.id.history_search)?.setText("")
+                renderHistoryResults()
+            }
+            .setNegativeButton(R.string.history_cancel, null).show()
+        dialog?.window?.decorView?.let(::applyMontserrat)
     }
 
     private fun renderAccount() {

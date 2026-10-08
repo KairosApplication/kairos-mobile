@@ -1,30 +1,13 @@
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:aapt="http://schemas.android.com/aapt"
-    android:width="108dp"
-    android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-    <path android:pathData="M31,63.928c0,0 6.4,-11 12.1,-13.1c7.2,-2.6 26,-1.4 26,-1.4l38.1,38.1L107,108.928l-32,-1L31,63.928z">
-        <aapt:attr name="android:fillColor">
-            <gradient
-                android:endX="85.84757"
-                android:endY="92.4963"
-                android:startX="42.9492"
-                android:startY="49.59793"
-                android:type="linear">
-                <item
-                    android:color="#44000000"
-                    android:offset="0.0" />
-                <item
-                    android:color="#00000000"
-                    android:offset="1.0" />
-            </gradient>
-        </aapt:attr>
-    </path>
-    <path
-        android:fillColor="#FFFFFF"
-        android:fillType="nonZero"
-        android:pathData="M65.3,45.828l3.8,-6.6c0.2,-0.4 0.1,-0.9 -0.3,-1.1c-0.4,-0.2 -0.9,-0.1 -1.1,0.3l-3.9,6.7c-6.3,-2.8 -13.4,-2.8 -19.7,0l-3.9,-6.7c-0.2,-0.4 -0.7,-0.5 -1.1,-0.3C38.8,38.328 38.7,38.828 38.9,39.228l3.8,6.6C36.2,49.428 31.7,56.028 31,63.928h46C76.3,56.028 71.8,49.428 65.3,45.828zM43.4,57.328c-0.8,0 -1.5,-0.5 -1.8,-1.2c-0.3,-0.7 -0.1,-1.5 0.4,-2.1c0.5,-0.5 1.4,-0.7 2.1,-0.4c0.7,0.3 1.2,1 1.2,1.8C45.3,56.528 44.5,57.328 43.4,57.328L43.4,57.328zM64.6,57.328c-0.8,0 -1.5,-0.5 -1.8,-1.2s-0.1,-1.5 0.4,-2.1c0.5,-0.5 1.4,-0.7 2.1,-0.4c0.7,0.3 1.2,1 1.2,1.8C66.5,56.528 65.6,57.328 64.6,57.328L64.6,57.328z"
-        android:strokeWidth="1"
-        android:strokeColor="#00000000" />
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Símbolo vetorial Kairos centralizado na área segura do ícone adaptativo. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+  <group android:scaleX="0.165" android:scaleY="0.165" android:translateX="19.5" android:translateY="25">
+    <path android:pathData="M198.79 230.045L196.542 223.044L193.03 229.472L186.217 231.783L192.472 235.394L194.72 242.397L198.232 235.967L205.045 233.656L198.79 230.045Z" android:fillColor="#FFFFFF" android:fillType="evenOdd" />
+    <path android:pathData="M220.94 246.424L215.822 240.448L215.21 248.385L209.705 253.677L217.198 254.52L222.317 260.5L222.927 252.559L228.432 247.267L220.94 246.424Z" android:fillColor="#FFFFFF" android:fillType="evenOdd" />
+    <path android:pathData="M163.146 279.916C176.305 262.732 199.376 275.914 220.542 268.081C230.822 264.277 241.771 270.617 247.442 279.916C257.039 295.655 269.534 318.961 273.149 325.756C273.615 326.631 272.977 327.68 271.986 327.68H137.318C136.339 327.68 135.696 326.668 136.141 325.795C139.797 318.645 153.179 292.934 163.146 279.916Z" android:fillColor="#FFFFFF" />
+    <path android:pathData="M186.996 198.061C186.585 198.906 111.747 326.557 111.747 326.557L105.894 336.808C103.554 340.905 106.513 346.001 111.231 346.001H299.734C304.549 346.001 307.494 340.714 304.959 336.62L108.111 18.645C104.852 13.3812 108.638 6.58453 114.829 6.58453H298.241C299.936 6.58453 301.555 7.28125 302.69 8.54039C304.855 10.9408 308.487 15.1009 310.766 18.4197C314.182 23.3927 224.415 152.411 219.892 158.328" android:fillColor="#00000000" android:strokeColor="#FFFFFF" android:strokeWidth="13.1691" />
+    <path android:pathData="M168.548 80.41C167.861 79.3574 168.9 78.0014 170.097 78.3842C176.563 80.452 190.268 84.5082 200.271 85.2039C216.936 86.3632 240.484 79.3869 249.698 76.3843C250.919 75.9864 251.974 77.4039 251.24 78.4573L221.765 120.709L209.721 140.088C209.213 140.906 208.026 140.919 207.5 140.112L168.548 80.41Z" android:fillColor="#FFFFFF" />
+    <path android:pathData="M215.158 153.574L226.617 160.227L216.771 174.94L209.112 163.156L215.158 153.574Z" android:fillColor="#FFFFFF" />
+    <path android:pathData="M192.014 203.076L180.646 195.619L193 176.585L201 187.585L192.014 203.076Z" android:fillColor="#FFFFFF" />
+  </group>
 </vector>

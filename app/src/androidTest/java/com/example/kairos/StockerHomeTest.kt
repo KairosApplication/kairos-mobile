@@ -5,6 +5,15 @@ import android.os.SystemClock
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import android.widget.EditText
+import android.graphics.Canvas
+import androidx.test.espresso.Espresso.onView
+import androidx.test.espresso.Espresso.onData
+import androidx.test.espresso.action.ViewActions.click
+import androidx.test.espresso.matcher.ViewMatchers.withId
+import androidx.test.espresso.matcher.ViewMatchers.withText
+import androidx.test.espresso.matcher.RootMatchers.isPlatformPopup
+import org.hamcrest.Matchers.equalTo
 import androidx.lifecycle.ViewModelStore
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -36,6 +45,99 @@ class StockerHomeTest {
         is TextView -> listOf(view)
         is ViewGroup -> (0 until view.childCount).flatMap { texts(view.getChildAt(it)) }
         else -> emptyList()
+    }
+
+    private fun capture(name: String, view: View) {
+        instrumentation.waitForIdleSync()
+        lateinit var bitmap: Bitmap
+        instrumentation.runOnMainSync {
+            bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+            view.draw(Canvas(bitmap))
+        }
+        File(instrumentation.targetContext.cacheDir, name).outputStream().use {
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
+        }
+        bitmap.recycle()
+    }
+
+    @Test fun restockingScreensFilterAndRestoreTheirStateAndAnimateTheMenu() {
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            SystemClock.sleep(2800)
+            lateinit var home: StockerHomeView
+            var startX = 0f
+            scenario.onActivity { activity ->
+                home = StockerHomeView(activity, {}, {})
+                home.bind(StockerHomeUiState(data = DemoStockerHomeRepository().load("demo")))
+                activity.setContentView(home)
+            }
+            instrumentation.waitForIdleSync()
+            scenario.onActivity {
+                startX = home.findViewById<View>(R.id.home_nav_indicator).translationX
+                home.findViewById<View>(R.id.home_nav_alerts).performClick()
+                assertTrue(texts(home).any { it.text.toString() == "Pendências e avisos" })
+                assertTrue(texts(home).any { it.text.toString() == "Concluídas recentemente" })
+                // The indicator starts at its old position; it must travel instead of teleporting.
+                assertEquals(startX, home.findViewById<View>(R.id.home_nav_indicator).translationX, 1f)
+            }
+            SystemClock.sleep(350)
+            capture("alerts-preview.png", home)
+            scenario.onActivity {
+                val indicator = home.findViewById<View>(R.id.home_nav_indicator)
+                assertTrue(indicator.translationX > startX)
+                val selected = home.findViewById<View>(R.id.home_nav_alerts)
+                assertEquals(selected.left + (selected.width - indicator.width) / 2f, indicator.translationX, 1f)
+                home.findViewById<View>(R.id.home_nav_history).performClick()
+            }
+            SystemClock.sleep(350)
+            capture("history-preview.png", home)
+            scenario.onActivity {
+                home.findViewById<EditText>(R.id.history_search).setText("agua")
+                val results = home.findViewById<View>(R.id.history_results)
+                assertEquals(2, texts(results).count { it.text.toString() == "Água Mineral" })
+                assertFalse(texts(results).any { it.text.toString().contains("Coca") })
+                home.findViewById<View>(R.id.history_filter).performClick()
+            }
+            onView(withId(R.id.history_period)).perform(click())
+            onData(equalTo("Ontem")).inRoot(isPlatformPopup()).perform(click())
+            onView(withId(R.id.history_shelf)).perform(click())
+            onData(equalTo("C03")).inRoot(isPlatformPopup()).perform(click())
+            onView(withText("Aplicar")).perform(click())
+            instrumentation.waitForIdleSync()
+            capture("history-filtered-preview.png", home)
+            scenario.onActivity {
+                val results = home.findViewById<View>(R.id.history_results)
+                assertEquals(1, texts(results).count { it.text.toString() == "Água Mineral" })
+                assertTrue(home.findViewById<View>(R.id.history_filter).isSelected)
+                home.findViewById<View>(R.id.home_nav_alerts).performClick()
+                home.findViewById<View>(R.id.home_nav_history).performClick()
+                assertEquals("agua", home.findViewById<EditText>(R.id.history_search).text.toString())
+                val saved = home.save()
+                val replacement = StockerHomeView(it, {}, {})
+                replacement.restore(saved)
+                replacement.bind(StockerHomeUiState(data = DemoStockerHomeRepository().load("demo")))
+                it.setContentView(replacement)
+                home = replacement
+                assertTrue(home.findViewById<View>(R.id.home_nav_history).isSelected)
+                assertEquals(1, texts(home.findViewById(R.id.history_results)).count { it.text.toString() == "Água Mineral" })
+                home.findViewById<EditText>(R.id.history_search).setText("inexistente")
+                assertTrue(texts(home).any { it.text.toString().startsWith("Nenhuma reposição encontrada") })
+                home.findViewById<View>(R.id.history_filter).performClick()
+            }
+            onView(withText("Limpar filtros")).perform(click())
+            scenario.onActivity { activity ->
+                assertEquals("", home.findViewById<EditText>(R.id.history_search).text.toString())
+                assertFalse(home.findViewById<View>(R.id.history_filter).isSelected)
+                assertEquals(6, texts(home.findViewById(R.id.history_results)).count { it.text.toString() == "Concluída!" })
+                val icon = activity.getDrawable(R.mipmap.ic_launcher)!!
+                val bitmap = Bitmap.createBitmap(256, 256, Bitmap.Config.ARGB_8888)
+                icon.setBounds(0, 0, 256, 256)
+                icon.draw(Canvas(bitmap))
+                File(instrumentation.targetContext.cacheDir, "launcher-preview.png").outputStream().use {
+                    bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
+                }
+                bitmap.recycle()
+            }
+        }
     }
 
     @Test fun navigationRetryAndLogoutAreAvailableWithoutChangingTheRealSession() {
