@@ -40,6 +40,8 @@ import com.example.kairos.model.home.HistoryPeriod
 import com.example.kairos.model.home.RestockingRecord
 import com.example.kairos.model.home.RestockingStatus
 import com.example.kairos.viewmodel.StockerHomeUiState
+import com.example.kairos.view.settings.SettingsDestination
+import com.example.kairos.view.settings.SettingsTemplateView
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
@@ -107,17 +109,40 @@ class StockerHomeView(
     }
     private val navIcons = mutableMapOf<Tab, ImageView>()
     private val navLabels = mutableMapOf<Tab, TextView>()
-    private val sectionHeader by lazy {
+    private val sectionHeaderTitle by lazy {
         label("", 24f, Color.WHITE).apply {
+            id = R.id.settings_screen_title
             gravity = Gravity.CENTER
+            ViewCompat.setAccessibilityHeading(this, true)
+        }
+    }
+    private val sectionHeaderBack by lazy {
+        androidx.appcompat.widget.AppCompatImageButton(context).apply {
+            id = R.id.settings_back
+            contentDescription = str(R.string.settings_back)
+            setImageResource(R.drawable.settings_chevron)
+            imageTintList = ColorStateList.valueOf(Color.WHITE)
+            rotation = 180f
+            setPadding(px(9f), px(9f), px(9f), px(9f))
+            background = RippleDrawable(ColorStateList.valueOf(0x33FFFFFF), null, rounded(Color.WHITE, 50f))
+            setOnClickListener { if (!signingOut) handleBack() }
+        }
+    }
+    private val sectionHeader by lazy {
+        FrameLayout(context).apply {
             background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
                 intArrayOf(0xFF0D6249.toInt(), 0xFF0A6A4F.toInt()))
-            ViewCompat.setAccessibilityHeading(this, true)
+            addView(sectionHeaderTitle, LayoutParams(-1, -1))
+            val touchSize = px(48f).coerceAtLeast((48 * density).toInt())
+            addView(sectionHeaderBack, LayoutParams(touchSize, touchSize, Gravity.CENTER_VERTICAL or Gravity.START).apply {
+                marginStart = px(16f)
+            })
         }
     }
     private var indicatorReady = false
     private var historyFilter = HistoryFilter()
     private var pendingRestoredState: Bundle? = null
+    private var settingsDestination = SettingsDestination.ROOT
     private var historyResults: LinearLayout? = null
     private var filterButton: FrameLayout? = null
     private var tab = Tab.START
@@ -162,10 +187,8 @@ class StockerHomeView(
 
     override fun onDraw(canvas: Canvas) {
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), backdrop)
-        if (tab != Tab.CONFIG) {
-            canvas.drawRect(0f, 0f, width.toFloat(), topInset.toFloat(), statusBarPaint)
-        }
-        if (tab == Tab.ALERTS || tab == Tab.HISTORY) {
+        canvas.drawRect(0f, 0f, width.toFloat(), topInset.toFloat(), statusBarPaint)
+        if (tab != Tab.START) {
             canvas.drawRect(0f, sectionHeader.bottom.toFloat(), width.toFloat(),
                 (sectionHeader.bottom + px(10f)).toFloat(), headerEdgePaint)
         }
@@ -197,11 +220,13 @@ class StockerHomeView(
         putString("historyPeriod", historyFilter.period.name)
         putString("historyShelf", historyFilter.shelfCode)
         putBoolean("historyOldestFirst", historyFilter.oldestFirst)
+        putString("settingsDestination", settingsDestination.name)
     }
     fun restore(saved: Bundle?) {
         close()
         tab = Tab.START
         historyFilter = HistoryFilter()
+        settingsDestination = SettingsDestination.ROOT
         pendingRestoredState = saved?.takeIf { !it.getString("ownerUid").isNullOrBlank() }?.let { Bundle(it) }
         indicatorReady = false
         applyRestoredState(user?.uid)
@@ -221,6 +246,10 @@ class StockerHomeView(
             saved.getString("historyQuery").orEmpty(),
             HistoryPeriod.entries.firstOrNull { it.name == saved.getString("historyPeriod") } ?: HistoryPeriod.ALL,
             saved.getString("historyShelf"), saved.getBoolean("historyOldestFirst"))
+        settingsDestination = if (tab == Tab.CONFIG) {
+            SettingsDestination.entries.firstOrNull { it.name == saved.getString("settingsDestination") }
+                ?: SettingsDestination.ROOT
+        } else SettingsDestination.ROOT
         indicatorReady = false
         return true
     }
@@ -237,6 +266,7 @@ class StockerHomeView(
         close()
         tab = Tab.START
         historyFilter = HistoryFilter()
+        settingsDestination = SettingsDestination.ROOT
         pendingRestoredState = null
         indicatorReady = false
         navIndicator.animate().cancel()
@@ -245,6 +275,10 @@ class StockerHomeView(
     }
 
     fun handleBack(): Boolean {
+        if (tab == Tab.CONFIG && settingsDestination != SettingsDestination.ROOT) {
+            openSettings(settingsDestination.parent)
+            return true
+        }
         if (tab == Tab.START) return false
         select(Tab.START)
         return true
@@ -263,11 +297,16 @@ class StockerHomeView(
     }
 
     private fun select(value: Tab) {
-        if (signingOut || tab == value) return
+        if (signingOut) return
+        if (tab == value) {
+            if (value == Tab.CONFIG && settingsDestination != SettingsDestination.ROOT) openSettings(SettingsDestination.ROOT)
+            return
+        }
         close()
         (context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as InputMethodManager)
             .hideSoftInputFromWindow(windowToken, 0)
         tab = value
+        settingsDestination = SettingsDestination.ROOT
         render()
         scroll.scrollTo(0, 0)
     }
@@ -314,7 +353,7 @@ class StockerHomeView(
     private fun render() {
         if (visibility == VISIBLE) {
             WindowCompat.getInsetsController(activity.window, this).apply {
-                isAppearanceLightStatusBars = tab == Tab.CONFIG
+                isAppearanceLightStatusBars = false
                 isAppearanceLightNavigationBars = true
             }
         }
@@ -325,12 +364,21 @@ class StockerHomeView(
         historyResults = null
         filterButton = null
         body.setPadding(0, 0, 0, px(20f))
-        sectionHeader.visibility = if (tab == Tab.ALERTS || tab == Tab.HISTORY) VISIBLE else GONE
-        sectionHeader.text = str(if (tab == Tab.ALERTS) R.string.restocking_alerts_title else R.string.restocking_history_title)
+        sectionHeader.visibility = if (tab != Tab.START) VISIBLE else GONE
+        sectionHeaderTitle.text = str(when (tab) {
+            Tab.ALERTS -> R.string.restocking_alerts_title
+            Tab.HISTORY -> R.string.restocking_history_title
+            Tab.CONFIG -> settingsDestination.title
+            Tab.START -> R.string.home_start
+        })
+        sectionHeaderBack.visibility = if (tab == Tab.CONFIG && settingsDestination != SettingsDestination.ROOT) VISIBLE else GONE
+        val headerPadding = if (sectionHeaderBack.visibility == VISIBLE) px(65f) else px(16f)
+        sectionHeaderTitle.setPadding(headerPadding, 0, headerPadding, 0)
+        sectionHeaderBack.isEnabled = !signingOut
         scroll.background = if (sectionHeader.visibility == VISIBLE) restockingBackground else null
-        if (tab == Tab.START) addHero() else if (tab == Tab.CONFIG) heading(R.string.home_config, 32f)
+        if (tab == Tab.START) addHero()
         if (tab == Tab.CONFIG) {
-            renderAccount()
+            renderSettings()
         } else if (state.loading || state.data == null && !state.failed) {
             add(ProgressBar(context).apply { contentDescription = str(R.string.home_loading) }, 32f, 170f)
             add(label(str(R.string.home_loading), 16f).apply { gravity = Gravity.CENTER }, 16f)
@@ -773,11 +821,71 @@ class StockerHomeView(
         dialog?.window?.decorView?.let(::applyMontserrat)
     }
 
+    private fun openSettings(destination: SettingsDestination) {
+        if (signingOut || tab != Tab.CONFIG) return
+        close()
+        settingsDestination = destination
+        render()
+        scroll.scrollTo(0, 0)
+    }
+
+    private fun renderSettings() {
+        if (settingsDestination != SettingsDestination.ROOT) {
+            add(SettingsTemplateView(context, scale).apply {
+                background = rounded(Color.WHITE, 20f, true)
+            }, 24f, 21f)
+            when (settingsDestination) {
+                SettingsDestination.PROFILE -> renderAccount()
+                SettingsDestination.HELP -> addSettingsCard(SettingsDestination.SUPPORT, 16f)
+                else -> Unit
+            }
+            return
+        }
+        sectionLabel(str(R.string.settings_account), 23f)
+        addSettingsCard(SettingsDestination.PROFILE, 13f)
+        addSettingsCard(SettingsDestination.SECURITY, 10f)
+        sectionLabel(str(R.string.settings_preferences), 18f)
+        addSettingsCard(SettingsDestination.NOTIFICATIONS, 13f)
+        addSettingsCard(SettingsDestination.APPEARANCE, 10f)
+        sectionLabel(str(R.string.settings_support_section), 16f)
+        addSettingsCard(SettingsDestination.HELP, 13f)
+        addSettingsCard(SettingsDestination.ABOUT, 10f)
+    }
+
+    private fun addSettingsCard(destination: SettingsDestination, top: Float) {
+        val title = str(if (destination == SettingsDestination.SUPPORT) R.string.settings_contact_support else destination.title)
+        val row = LinearLayout(context).apply {
+            id = destination.viewId
+            gravity = Gravity.CENTER_VERTICAL
+            minimumHeight = px(81f)
+            setPadding(px(21f), px(16f), px(20f), px(16f))
+            contentDescription = "$title. ${str(destination.description)}"
+            isEnabled = !signingOut
+        }
+        card(row) { openSettings(destination) }
+        row.addView(FrameLayout(context).apply {
+            background = rounded(0x66B3D5C3, 50f)
+            val iconSize = if (destination == SettingsDestination.PROFILE) 40f else 30f
+            addView(icon(destination.icon), LayoutParams(px(iconSize), px(iconSize), Gravity.CENTER))
+        }, LinearLayout.LayoutParams(px(48f), px(48f)))
+        row.addView(LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(label(title, 17f))
+            addView(label(str(destination.description), 15f, 0xB30F2B21.toInt()).apply {
+                typeface = Typeface.create(montserrat, 500, false)
+                fontVariationSettings = "'wght' 500"
+            }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(2f) })
+        }, LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = px(17f); marginEnd = px(10f) })
+        row.addView(icon(R.drawable.settings_chevron), LinearLayout.LayoutParams(px(30f), px(30f)))
+        body.addView(row, LinearLayout.LayoutParams(-1, -2).apply {
+            setMargins(px(21f), px(top), px(19f), 0)
+        })
+    }
+
     private fun renderAccount() {
         add(label(str(R.string.home_account), 18f), 28f)
         add(label(user?.name.orEmpty(), 18f), 12f)
         add(label(user?.email.orEmpty(), 16f, secondary), 8f)
-        if (state.data?.isDemo == true) add(label(str(R.string.home_demo_description), 16f, secondary), 28f)
         if (sessionMessage.isNotBlank()) add(label(sessionMessage, 16f).apply { accessibilityLiveRegion = ACCESSIBILITY_LIVE_REGION_POLITE }, 20f)
         add(textButton(str(if (signingOut) R.string.home_logging_out else R.string.home_logout), onLogout).apply {
             id = R.id.home_logout

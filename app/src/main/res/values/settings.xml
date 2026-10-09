@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_title">Configurações</string>
+    <string name="settings_account">Conta</string>
+    <string name="settings_preferences">Preferências</string>
+    <string name="settings_support_section">Suporte</string>
+    <string name="settings_profile">Perfil</string>
+    <string name="settings_profile_description">Visualize e edite seus dados</string>
+    <string name="settings_security">Segurança</string>
+    <string name="settings_security_description">Controle de acesso à conta</string>
+    <string name="settings_notifications">Notificações</string>
+    <string name="settings_notifications_description">Personalize seus alertas</string>
+    <string name="settings_appearance">Aparência</string>
+    <string name="settings_appearance_description">Tema e personalização</string>
+    <string name="settings_help">Ajuda e Suporte</string>
+    <string name="settings_help_description">Tire suas dúvidas</string>
+    <string name="settings_about">Sobre o KAIROS</string>
+    <string name="settings_about_description">Versão e informações</string>
+    <string name="settings_contact_support">Falar com o suporte</string>
+    <string name="settings_support_description">Atendimento e orientação</string>
+    <string name="settings_coming_soon">Em breve</string>
+    <string name="settings_template_description">Esta seção estará disponível em uma próxima atualização.</string>
+    <string name="settings_back">Voltar</string>
+    <item name="settings_profile" type="id" />
+    <item name="settings_security" type="id" />
+    <item name="settings_notifications" type="id" />
+    <item name="settings_appearance" type="id" />
+    <item name="settings_help" type="id" />
+    <item name="settings_about" type="id" />
+    <item name="settings_contact_support" type="id" />
+    <item name="settings_back" type="id" />
+    <item name="settings_screen_title" type="id" />
+    <item name="settings_template" type="id" />
+</resources>

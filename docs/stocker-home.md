@@ -22,7 +22,8 @@ preserva o espaço transparente do componente original; a seta visível é
   carregue mesmo quando a consulta antiga ignora interrupções. Oferece estados
   de carregamento, erro e nova tentativa.
 - Pendências abre Alertas; Concluídas abre Histórico. Essas abas apresentam os
-  exemplos do repositório. Ajustes mantém os dados da conta e a saída real.
+  exemplos do repositório. Ajustes abre os acessos de conta, preferências e suporte;
+  os dados da conta e a saída real ficam em Perfil. Veja [fluxo de ajustes](settings-flow.md).
 - Verificar gôndola informa que a função por foto ainda está indisponível.
 - Voltar nas abas retorna ao Início; voltar no Início encerra a atividade sem
   desconectar a conta. A aba selecionada é restaurada na recriação da atividade.
