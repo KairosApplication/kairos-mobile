@@ -74,6 +74,8 @@ class StockerHomeView(
     }
     private val locale = Locale.forLanguageTag("pt-BR")
     private val backdrop = Paint()
+    private var backdropTop = Float.NaN
+    private var backdropBottom = Float.NaN
     private val statusBarPaint = Paint().apply { color = 0xFF0D6249.toInt() }
     private val headerEdgePaint = Paint().apply { color = 0xFF0A6A4F.toInt() }
     private val restockingBackground = object : Drawable() {
@@ -160,7 +162,10 @@ class StockerHomeView(
             orientation = LinearLayout.VERTICAL
             addView(sectionHeader, LinearLayout.LayoutParams(-1, px(80f)))
             addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
-            navFrame.background = rounded(color(R.color.home_nav), 20f)
+            navFrame.background = rounded(color(R.color.home_nav), 20f).apply {
+                val radius = px(20f).toFloat()
+                cornerRadii = floatArrayOf(radius, radius, radius, radius, 0f, 0f, 0f, 0f)
+            }
             navFrame.addView(nav, LayoutParams(-1, -2))
             navFrame.addView(navIndicator, LayoutParams(px(65f), px(4f), Gravity.BOTTOM or Gravity.START).apply {
                 bottomMargin = px(5f)
@@ -179,13 +184,21 @@ class StockerHomeView(
         render()
     }
 
-    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
-        backdrop.shader = LinearGradient(0f, 0f, 0f, h.toFloat(),
+    private fun updateBackdrop() {
+        // Match the ScrollView's gradient coordinates so exposed menu corners have
+        // the same color as the page directly above them. Home keeps its full-height gradient.
+        val top = if (tab == Tab.START) 0f else scroll.top.toFloat()
+        val bottom = if (tab == Tab.START) height.toFloat() else scroll.bottom.toFloat()
+        if (bottom <= top || top == backdropTop && bottom == backdropBottom) return
+        backdropTop = top
+        backdropBottom = bottom
+        backdrop.shader = LinearGradient(0f, top, 0f, bottom,
             intArrayOf(0xFFE5EFEC.toInt(), 0xFFF4EFEF.toInt(), 0xFFDEDEDE.toInt()),
             floatArrayOf(0f, .86538f, 1f), Shader.TileMode.CLAMP)
     }
 
     override fun onDraw(canvas: Canvas) {
+        updateBackdrop()
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), backdrop)
         canvas.drawRect(0f, 0f, width.toFloat(), topInset.toFloat(), statusBarPaint)
         if (tab != Tab.START) {

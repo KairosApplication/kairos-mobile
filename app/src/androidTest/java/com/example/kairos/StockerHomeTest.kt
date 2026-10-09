@@ -7,6 +7,7 @@ import android.view.ViewGroup
 import android.widget.TextView
 import android.widget.EditText
 import android.graphics.Canvas
+import android.graphics.Color
 import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.Espresso.onData
 import androidx.test.espresso.action.ViewActions.click
@@ -61,6 +62,42 @@ class StockerHomeTest {
             bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
         }
         bitmap.recycle()
+    }
+
+    @Test fun bottomMenuCornersBlendWithThePageOnEveryTab() {
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            SystemClock.sleep(2800)
+            lateinit var home: StockerHomeView
+            scenario.onActivity { activity ->
+                home = StockerHomeView(activity, {}, {})
+                home.updateSession(demoUser(), false, "")
+                home.bind(StockerHomeUiState(data = DemoStockerHomeRepository().load("demo")))
+                activity.setContentView(home)
+            }
+            for (tab in listOf(R.id.home_nav_start, R.id.home_nav_alerts, R.id.home_nav_history, R.id.home_nav_config)) {
+                scenario.onActivity { home.findViewById<View>(tab).performClick() }
+                instrumentation.waitForIdleSync()
+                scenario.onActivity {
+                    val menu = home.findViewById<View>(R.id.home_nav_start).parent.parent as View
+                    val menuPosition = IntArray(2).also { menu.getLocationInWindow(it) }
+                    val homePosition = IntArray(2).also { home.getLocationInWindow(it) }
+                    val left = menuPosition[0] - homePosition[0]
+                    val top = menuPosition[1] - homePosition[1]
+                    val bitmap = Bitmap.createBitmap(home.width, home.height, Bitmap.Config.ARGB_8888)
+                    try {
+                        home.draw(Canvas(bitmap))
+                        for (x in listOf(left + 1, left + menu.width - 2)) {
+                            val page = bitmap.getPixel(x, top - 1)
+                            val corner = bitmap.getPixel(x, top + 2)
+                            assertEquals("Opaque background on tab $tab", 255, Color.alpha(corner))
+                            assertTrue("Red channel mismatch on tab $tab", kotlin.math.abs(Color.red(page) - Color.red(corner)) <= 2)
+                            assertTrue("Green channel mismatch on tab $tab", kotlin.math.abs(Color.green(page) - Color.green(corner)) <= 2)
+                            assertTrue("Blue channel mismatch on tab $tab", kotlin.math.abs(Color.blue(page) - Color.blue(corner)) <= 2)
+                        }
+                    } finally { bitmap.recycle() }
+                }
+            }
+        }
     }
 
     @Test fun restockingScreensFilterAndRestoreTheirStateAndAnimateTheMenu() {
