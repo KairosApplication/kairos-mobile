@@ -33,8 +33,13 @@ class FirebaseAuthRepository(
     override fun restoreSession(): SignedInUser? = auth.current()?.let(::session)
 
     private fun session(identity: AuthIdentity): SignedInUser {
-        val profile = profiles.read(identity.uid)
+        var profile = profiles.read(identity.uid)
         check(profile == null || profile.uid == identity.uid) { "Perfil não corresponde à sessão." }
+        if (profile != null && profile.email != identity.email) {
+            auth.refreshToken()
+            profile = profiles.updateEmail(identity.uid, identity.email)
+            check(profile.uid == identity.uid) { "Perfil não corresponde à sessão." }
+        }
         return SignedInUser(identity.uid, identity.email, profile)
     }
 
@@ -51,4 +56,46 @@ class FirebaseAuthRepository(
     }
 
     override fun logout() = auth.signOut()
+
+    private fun currentAccount(uid: String): SignedInUser {
+        val identity = auth.current() ?: throw AccountChangedException()
+        if (identity.uid != uid) throw AccountChangedException()
+        return session(identity)
+    }
+
+    private fun assertOwner(uid: String) {
+        if (auth.currentUid() != uid) throw AccountChangedException()
+    }
+
+    override fun updateName(uid: String, name: String, lastName: String): SignedInUser {
+        val first = name.trim()
+        val last = lastName.trim()
+        AccountValidation.name(first, last)
+        val account = currentAccount(uid)
+        require(account.profile != null) { "Complete o cadastro antes de editar sua conta." }
+        val profile = profiles.updateName(uid, first, last)
+        assertOwner(uid)
+        check(profile.uid == uid) { "Perfil não corresponde à sessão." }
+        return account.copy(profile = profile)
+    }
+
+    override fun requestEmailChange(uid: String, email: String, currentPassword: String): SignedInUser {
+        val newEmail = email.trim()
+        AuthValidation.email(newEmail)
+        AuthValidation.password(currentPassword)
+        val account = currentAccount(uid)
+        require(!newEmail.equals(account.email, ignoreCase = true)) { "Informe um e-mail diferente do atual." }
+        auth.requestEmailChange(uid, newEmail, currentPassword)
+        assertOwner(uid)
+        // The old address remains authoritative until the new address is verified.
+        return account
+    }
+
+    override fun changePassword(uid: String, currentPassword: String, newPassword: String): SignedInUser {
+        AccountValidation.password(currentPassword, newPassword)
+        val account = currentAccount(uid)
+        auth.changePassword(uid, currentPassword, newPassword)
+        assertOwner(uid)
+        return account
+    }
 }

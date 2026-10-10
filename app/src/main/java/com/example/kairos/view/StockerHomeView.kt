@@ -42,6 +42,12 @@ import com.example.kairos.model.home.RestockingStatus
 import com.example.kairos.viewmodel.StockerHomeUiState
 import com.example.kairos.view.settings.SettingsDestination
 import com.example.kairos.view.settings.SettingsTemplateView
+import com.example.kairos.view.settings.ProfileView
+import com.example.kairos.view.settings.SecurityView
+import com.example.kairos.view.settings.AccountEditField
+import com.example.kairos.view.settings.AccountEditorDialog
+import com.example.kairos.model.auth.AccountEditRequest
+import com.example.kairos.model.auth.AccountOperation
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
@@ -53,7 +59,8 @@ import java.util.Locale
 class StockerHomeView(
     private val activity: AppCompatActivity,
     private val onRetry: () -> Unit,
-    private val onLogout: () -> Unit
+    private val onLogout: () -> Unit,
+    private val onAccountEdit: ((AccountEditRequest) -> Unit)? = null
 ) : FrameLayout(activity) {
     private enum class Tab(val label: Int, val icon: Int, val viewId: Int) {
         START(R.string.home_start, R.drawable.home_house, R.id.home_nav_start),
@@ -74,6 +81,8 @@ class StockerHomeView(
     }
     private val locale = Locale.forLanguageTag("pt-BR")
     private val backdrop = Paint()
+    private var backdropTop = Float.NaN
+    private var backdropBottom = Float.NaN
     private val statusBarPaint = Paint().apply { color = 0xFF0D6249.toInt() }
     private val headerEdgePaint = Paint().apply { color = 0xFF0A6A4F.toInt() }
     private val restockingBackground = object : Drawable() {
@@ -149,6 +158,7 @@ class StockerHomeView(
     private var user: SignedInUser? = null
     private var state = StockerHomeUiState()
     private var signingOut = false
+    private var accountOperation: AccountOperation? = null
     private var sessionMessage = ""
     private var dialog: AlertDialog? = null
     private var topInset = 0
@@ -160,7 +170,10 @@ class StockerHomeView(
             orientation = LinearLayout.VERTICAL
             addView(sectionHeader, LinearLayout.LayoutParams(-1, px(80f)))
             addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
-            navFrame.background = rounded(color(R.color.home_nav), 20f)
+            navFrame.background = rounded(color(R.color.home_nav), 20f).apply {
+                val radius = px(20f).toFloat()
+                cornerRadii = floatArrayOf(radius, radius, radius, radius, 0f, 0f, 0f, 0f)
+            }
             navFrame.addView(nav, LayoutParams(-1, -2))
             navFrame.addView(navIndicator, LayoutParams(px(65f), px(4f), Gravity.BOTTOM or Gravity.START).apply {
                 bottomMargin = px(5f)
@@ -179,13 +192,19 @@ class StockerHomeView(
         render()
     }
 
-    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
-        backdrop.shader = LinearGradient(0f, 0f, 0f, h.toFloat(),
+    private fun updateBackdrop() {
+        val top = if (tab == Tab.START) 0f else scroll.top.toFloat()
+        val bottom = if (tab == Tab.START) height.toFloat() else scroll.bottom.toFloat()
+        if (bottom <= top || top == backdropTop && bottom == backdropBottom) return
+        backdropTop = top
+        backdropBottom = bottom
+        backdrop.shader = LinearGradient(0f, top, 0f, bottom,
             intArrayOf(0xFFE5EFEC.toInt(), 0xFFF4EFEF.toInt(), 0xFFDEDEDE.toInt()),
             floatArrayOf(0f, .86538f, 1f), Shader.TileMode.CLAMP)
     }
 
     override fun onDraw(canvas: Canvas) {
+        updateBackdrop()
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), backdrop)
         canvas.drawRect(0f, 0f, width.toFloat(), topInset.toFloat(), statusBarPaint)
         if (tab != Tab.START) {
@@ -201,13 +220,16 @@ class StockerHomeView(
         render()
     }
 
-    fun updateSession(value: SignedInUser?, busy: Boolean, message: String) {
+    fun updateSession(value: SignedInUser?, busy: Boolean, message: String, operation: AccountOperation? = null) {
         if (user != null && user?.uid != value?.uid) reset()
+        if (user != null && user?.email != value?.email) close()
         val restored = applyRestoredState(value?.uid)
-        if (!restored && user == value && signingOut == busy && sessionMessage == message) return
+        if (!restored && user == value && signingOut == busy && sessionMessage == message && accountOperation == operation) return
         user = value
         signingOut = busy
         sessionMessage = message
+        accountOperation = operation
+        dialog?.getButton(AlertDialog.BUTTON_POSITIVE)?.isEnabled = !busy
         render()
     }
 
@@ -259,6 +281,7 @@ class StockerHomeView(
         user = null
         signingOut = false
         sessionMessage = ""
+        accountOperation = null
         render()
     }
 
@@ -373,9 +396,17 @@ class StockerHomeView(
         })
         sectionHeaderBack.visibility = if (tab == Tab.CONFIG && settingsDestination != SettingsDestination.ROOT) VISIBLE else GONE
         val headerPadding = if (sectionHeaderBack.visibility == VISIBLE) px(65f) else px(16f)
-        sectionHeaderTitle.setPadding(headerPadding, 0, headerPadding, 0)
+        val accountPage = tab == Tab.CONFIG && settingsDestination in listOf(SettingsDestination.PROFILE, SettingsDestination.SECURITY)
+        sectionHeaderTitle.gravity = if (accountPage) Gravity.CENTER_VERTICAL or Gravity.START else Gravity.CENTER
+        sectionHeaderTitle.setPadding(if (accountPage) px(73f) else headerPadding, 0, if (accountPage) px(16f) else headerPadding, 0)
+        sectionHeaderBack.setImageResource(if (accountPage) R.drawable.account_back else R.drawable.settings_chevron)
+        sectionHeaderBack.rotation = if (accountPage) 0f else 180f
+        sectionHeaderBack.setPadding(px(if (accountPage) 6.5f else 9f), px(if (accountPage) 6.5f else 9f),
+            px(if (accountPage) 6.5f else 9f), px(if (accountPage) 6.5f else 9f))
+        (sectionHeaderBack.layoutParams as LayoutParams).marginStart = px(if (accountPage) 12f else 16f)
         sectionHeaderBack.isEnabled = !signingOut
-        scroll.background = if (sectionHeader.visibility == VISIBLE) restockingBackground else null
+        scroll.background = if (sectionHeader.visibility == VISIBLE && !(accountPage && settingsDestination == SettingsDestination.PROFILE))
+            restockingBackground else null
         if (tab == Tab.START) addHero()
         if (tab == Tab.CONFIG) {
             renderSettings()
@@ -830,12 +861,21 @@ class StockerHomeView(
     }
 
     private fun renderSettings() {
+        if (settingsDestination == SettingsDestination.PROFILE) {
+            body.addView(ProfileView(context, scale, user, state.data?.profileWorkSummary, state.data?.isDemo == true,
+                signingOut, if (accountOperation == null) R.string.home_logging_out else R.string.account_saving,
+                sessionMessage, { openSettings(SettingsDestination.SECURITY) }, onLogout), LinearLayout.LayoutParams(-1, -2))
+            return
+        }
+        if (settingsDestination == SettingsDestination.SECURITY) {
+            body.addView(SecurityView(context, scale, user, signingOut, sessionMessage, ::editAccount), LinearLayout.LayoutParams(-1, -2))
+            return
+        }
         if (settingsDestination != SettingsDestination.ROOT) {
             add(SettingsTemplateView(context, scale).apply {
                 background = rounded(Color.WHITE, 20f, true)
             }, 24f, 21f)
             when (settingsDestination) {
-                SettingsDestination.PROFILE -> renderAccount()
                 SettingsDestination.HELP -> addSettingsCard(SettingsDestination.SUPPORT, 16f)
                 else -> Unit
             }
@@ -850,6 +890,20 @@ class StockerHomeView(
         sectionLabel(str(R.string.settings_support_section), 16f)
         addSettingsCard(SettingsDestination.HELP, 13f)
         addSettingsCard(SettingsDestination.ABOUT, 10f)
+    }
+
+    private fun editAccount(field: AccountEditField) {
+        if (signingOut) return
+        val current = user ?: return
+        val submit = onAccountEdit ?: run {
+            showInfo(str(R.string.home_account), str(R.string.account_actions_unavailable))
+            return
+        }
+        close()
+        dialog = AccountEditorDialog.show(activity, scale, current, field) { request ->
+            require(user?.uid == request.uid && !signingOut) { "A sessão mudou. Faça login novamente." }
+            submit(request)
+        }
     }
 
     private fun addSettingsCard(destination: SettingsDestination, top: Float) {
@@ -880,17 +934,6 @@ class StockerHomeView(
         body.addView(row, LinearLayout.LayoutParams(-1, -2).apply {
             setMargins(px(21f), px(top), px(19f), 0)
         })
-    }
-
-    private fun renderAccount() {
-        add(label(str(R.string.home_account), 18f), 28f)
-        add(label(user?.name.orEmpty(), 18f), 12f)
-        add(label(user?.email.orEmpty(), 16f, secondary), 8f)
-        if (sessionMessage.isNotBlank()) add(label(sessionMessage, 16f).apply { accessibilityLiveRegion = ACCESSIBILITY_LIVE_REGION_POLITE }, 20f)
-        add(textButton(str(if (signingOut) R.string.home_logging_out else R.string.home_logout), onLogout).apply {
-            id = R.id.home_logout
-            isEnabled = !signingOut
-        }, 28f)
     }
 
     private fun textButton(title: String, action: () -> Unit) = androidx.appcompat.widget.AppCompatButton(context).apply {

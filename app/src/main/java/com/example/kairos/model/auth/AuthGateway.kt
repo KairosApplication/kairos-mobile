@@ -9,11 +9,17 @@ interface AuthGateway {
     fun current(): AuthIdentity?
     fun sendResetLink(email: String)
     fun signOut()
+    fun currentUid(): String? = current()?.uid
+    fun refreshToken() = Unit
+    fun requestEmailChange(uid: String, email: String, password: String): Unit = error("Operação indisponível.")
+    fun changePassword(uid: String, currentPassword: String, newPassword: String): Unit = error("Operação indisponível.")
 }
 
 interface ProfileStore {
     fun read(uid: String): UserProfile?
     fun create(profile: UserProfile): UserProfile
+    fun updateName(uid: String, name: String, lastName: String): UserProfile = error("Operação indisponível.")
+    fun updateEmail(uid: String, email: String): UserProfile = error("Operação indisponível.")
 }
 
 class ProfileIncompleteException(val user: SignedInUser, cause: Exception) :
