@@ -41,7 +41,7 @@ class StockerSettingsTest {
                 home.bind(StockerHomeUiState(failed = true))
                 activity.setContentView(home)
                 home.findViewById<View>(R.id.home_nav_config).performClick()
-                assertEquals("Configurações", title(home))
+                assertEquals("Ajustes", title(home))
                 assertEquals(View.GONE, home.findViewById<View>(R.id.settings_back).visibility)
             }
             instrumentation.waitForIdleSync()
@@ -65,7 +65,7 @@ class StockerSettingsTest {
                     assertTrue(home.findViewById<View>(R.id.home_nav_config).isSelected)
                     assertEquals(View.VISIBLE, home.findViewById<View>(R.id.settings_back).visibility)
                     home.findViewById<View>(R.id.settings_back).performClick()
-                    assertEquals("Configurações", title(home))
+                    assertEquals("Ajustes", title(home))
                 }
                 home.findViewById<View>(R.id.settings_help).performClick()
                 home.findViewById<View>(R.id.settings_contact_support).performClick()
@@ -73,12 +73,12 @@ class StockerSettingsTest {
                 assertTrue(home.handleBack())
                 assertEquals("Ajuda e Suporte", title(home))
                 assertTrue(home.handleBack())
-                assertEquals("Configurações", title(home))
+                assertEquals("Ajustes", title(home))
                 home.findViewById<View>(R.id.settings_security).performClick()
                 home.findViewById<View>(R.id.home_nav_alerts).performClick()
                 assertTrue(home.findViewById<View>(R.id.home_nav_alerts).isSelected)
                 home.findViewById<View>(R.id.home_nav_config).performClick()
-                assertEquals("Configurações", title(home))
+                assertEquals("Ajustes", title(home))
                 home.findViewById<View>(R.id.settings_profile).performClick()
                 home.updateSession(user(), true, "")
                 assertFalse(home.findViewById<View>(R.id.home_logout).isEnabled)
@@ -87,7 +87,7 @@ class StockerSettingsTest {
                 home.findViewById<View>(R.id.home_logout).performClick()
                 assertEquals(1, logoutCalls)
                 assertTrue(home.handleBack())
-                assertEquals("Configurações", title(home))
+                assertEquals("Ajustes", title(home))
                 assertTrue(home.handleBack())
                 assertTrue(home.findViewById<View>(R.id.home_nav_start).isSelected)
                 assertFalse(home.handleBack())
@@ -119,23 +119,23 @@ class StockerSettingsTest {
                 assertEquals("Ajuda e Suporte", title(recreated))
                 // Tapping the selected bottom item returns to the root of Settings.
                 recreated.findViewById<View>(R.id.home_nav_config).performClick()
-                assertEquals("Configurações", title(recreated))
+                assertEquals("Ajustes", title(recreated))
 
                 val anotherAccount = StockerHomeView(activity, {}, {})
                 anotherAccount.restore(saved)
                 anotherAccount.updateSession(user("other-account"), false, "")
                 assertTrue(anotherAccount.findViewById<View>(R.id.home_nav_start).isSelected)
                 anotherAccount.findViewById<View>(R.id.home_nav_config).performClick()
-                assertEquals("Configurações", title(anotherAccount))
+                assertEquals("Ajustes", title(anotherAccount))
                 anotherAccount.findViewById<View>(R.id.settings_appearance).performClick()
                 anotherAccount.reset()
                 anotherAccount.updateSession(user("other-account"), false, "")
                 anotherAccount.findViewById<View>(R.id.home_nav_config).performClick()
-                assertEquals("Configurações", title(anotherAccount))
+                assertEquals("Ajustes", title(anotherAccount))
 
                 val invalid = android.os.Bundle(saved).apply { putString("settingsDestination", "REMOVED_SCREEN") }
                 recreated.restore(invalid)
-                assertEquals("Configurações", title(recreated))
+                assertEquals("Ajustes", title(recreated))
             }
         }
     }

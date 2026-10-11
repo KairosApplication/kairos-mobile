@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="settings_title">Configurações</string>
+    <string name="settings_title">Ajustes</string>
     <string name="settings_account">Conta</string>
     <string name="settings_preferences">Preferências</string>
     <string name="settings_support_section">Suporte</string>

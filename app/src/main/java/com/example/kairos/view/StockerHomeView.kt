@@ -193,6 +193,8 @@ class StockerHomeView(
     }
 
     private fun updateBackdrop() {
+        // Match the ScrollView's gradient coordinates so exposed menu corners have
+        // the same color as the page directly above them. Home keeps its full-height gradient.
         val top = if (tab == Tab.START) 0f else scroll.top.toFloat()
         val bottom = if (tab == Tab.START) height.toFloat() else scroll.bottom.toFloat()
         if (bottom <= top || top == backdropTop && bottom == backdropBottom) return

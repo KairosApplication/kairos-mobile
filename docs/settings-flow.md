@@ -1,7 +1,7 @@
 # Ajustes do repositor
 
 A página principal segue o frame [Tela-Config, 713:1826](https://www.figma.com/design/OFMvU7yImxJFUpV7e061Pj?node-id=713-1826).
-O título é Configurações; a aba continua identificada como Ajustes.
+O título é Ajustes; a aba continua identificada como Ajustes.
 
 | Grupo | Acesso | Destino |
 | --- | --- | --- |
@@ -18,7 +18,7 @@ As demais telas filhas usam `SettingsTemplateView` com o aviso Em breve; cada de
 tem uma chave em `SettingsDestination` para receber sua implementação específica.
 
 O botão Voltar e o retorno do sistema levam Suporte → Ajuda e Suporte →
-Configurações → Início. As demais telas filhas voltam diretamente a Configurações.
+Ajustes → Início. As demais telas filhas voltam diretamente a Ajustes.
 O menu inferior permanece disponível e mantém Ajustes selecionado nas telas filhas.
 Tocar em Ajustes enquanto uma tela filha está aberta retorna à página principal.
 Trocar para outra aba e voltar também abre a página principal de Ajustes.
