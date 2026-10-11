@@ -14,7 +14,8 @@ data class AuthUiState(
     val screen: AuthScreen = AuthScreen.LOGIN,
     val loading: Boolean = false,
     val message: String = "",
-    val user: SignedInUser? = null
+    val user: SignedInUser? = null,
+    val accountOperation: AccountOperation? = null
 )
 
 class AuthViewModel(private val repository: AuthRepository?) : ViewModel() {
@@ -50,28 +51,32 @@ class AuthViewModel(private val repository: AuthRepository?) : ViewModel() {
     private fun run(
         minimumLoadingMillis: Long = 0L,
         loadingScreen: AuthScreen? = null,
+        accountOperation: AccountOperation? = null,
         action: (AuthRepository) -> AuthUiState
     ) {
         val previous = mutableState.value!!
         if (previous.loading) return
-        mutableState.value = previous.copy(screen = loadingScreen ?: previous.screen, loading = true, message = "")
+        mutableState.value = previous.copy(screen = loadingScreen ?: previous.screen, loading = true, message = "", accountOperation = accountOperation)
         val startedAt = System.nanoTime()
         executor.execute {
             val result = try {
                 action(repository ?: throw IllegalArgumentException(
                     "Adicione app/google-services.json para com.example.kairos e sincronize o Gradle."))
+            } catch (e: AccountChangedException) {
+                AuthUiState(message = e.message.orEmpty())
             } catch (e: ProfileIncompleteException) {
                 authenticated(e.user).copy(message = e.message.orEmpty() + "\n" +
                     AuthErrorMessage.from(e.cause as? Exception ?: e))
             } catch (e: IllegalArgumentException) {
                 previous.copy(message = e.message ?: "Confira os dados informados.")
             } catch (e: Exception) {
-                previous.copy(message = AuthErrorMessage.from(e))
+                previous.copy(message = if (accountOperation != null) "Não foi possível atualizar sua conta. Verifique a conexão e tente novamente."
+                    else AuthErrorMessage.from(e))
             }
             val elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt)
             val remaining = (minimumLoadingMillis - elapsedMillis).coerceAtLeast(0L)
             if (!executor.isShutdown) executor.schedule({
-                mutableState.postValue(result.copy(loading = false))
+                mutableState.postValue(result.copy(loading = false, accountOperation = null))
             }, remaining, TimeUnit.MILLISECONDS)
         }
     }
@@ -107,6 +112,32 @@ class AuthViewModel(private val repository: AuthRepository?) : ViewModel() {
     fun logout() = run {
         it.logout()
         AuthUiState()
+    }
+
+    fun editAccount(request: AccountEditRequest) = run(accountOperation = request.operation) {
+        if (mutableState.value?.user?.uid != request.uid) throw AccountChangedException()
+        val user = when (request) {
+            is AccountEditRequest.Name -> it.updateName(request.uid, request.name, request.lastName)
+            is AccountEditRequest.Email -> it.requestEmailChange(request.uid, request.email, request.currentPassword)
+            is AccountEditRequest.Password -> it.changePassword(request.uid, request.currentPassword, request.newPassword)
+        }
+        if (user.uid != request.uid) throw AccountChangedException()
+        authenticated(user).copy(message = when (request.operation) {
+            AccountOperation.NAME -> "Nome atualizado com sucesso."
+            AccountOperation.EMAIL -> "Enviamos um link para o novo e-mail. Confirme a alteração na mensagem recebida."
+            AccountOperation.PASSWORD -> "Senha atualizada com sucesso."
+            AccountOperation.REFRESH -> ""
+        })
+    }
+
+    fun refreshAccount() {
+        val previous = mutableState.value ?: return
+        if (previous.screen != AuthScreen.HOME || previous.loading) return
+        run(accountOperation = AccountOperation.REFRESH) {
+            val updated = it.restoreSession() ?: throw AccountChangedException()
+            authenticated(updated).copy(message = if (previous.user?.email != updated.email)
+                "E-mail atualizado com sucesso." else previous.message)
+        }
     }
 
     override fun onCleared() { executor.shutdownNow() }

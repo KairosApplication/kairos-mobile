@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Only the Android emulator loopback is allowed for local Firebase integration tests. -->
+    <application android:networkSecurityConfig="@xml/firebase_emulator_network">
+        <activity android:name=".view.AccountTestActivity" android:exported="false" android:theme="@style/Theme.Kairos" />
+    </application>
+</manifest>

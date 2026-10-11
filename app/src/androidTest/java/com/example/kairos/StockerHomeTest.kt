@@ -25,7 +25,7 @@ import com.example.kairos.model.auth.SignedInUser
 import com.example.kairos.model.auth.UserProfile
 import com.example.kairos.model.home.DemoStockerHomeRepository
 import com.example.kairos.model.home.StockerHomeRepository
-import com.example.kairos.view.MainActivity
+import com.example.kairos.view.AccountTestActivity
 import com.example.kairos.view.StockerHomeView
 import com.example.kairos.viewmodel.StockerHomeUiState
 import com.example.kairos.viewmodel.StockerHomeViewModel
@@ -101,7 +101,7 @@ class StockerHomeTest {
     }
 
     @Test fun restockingScreensFilterAndRestoreTheirStateAndAnimateTheMenu() {
-        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+        ActivityScenario.launch(AccountTestActivity::class.java).use { scenario ->
             SystemClock.sleep(2800)
             lateinit var home: StockerHomeView
             var startX = 0f
@@ -183,7 +183,7 @@ class StockerHomeTest {
     }
 
     @Test fun navigationRetryAndLogoutAreAvailableWithoutChangingTheRealSession() {
-        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+        ActivityScenario.launch(AccountTestActivity::class.java).use { scenario ->
             SystemClock.sleep(2800)
             lateinit var home: StockerHomeView
             var logout = false
@@ -239,7 +239,7 @@ class StockerHomeTest {
     }
 
     @Test fun restoredFiltersWaitForTheirOwnerAndAreDiscardedForAnotherAccount() {
-        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+        ActivityScenario.launch(AccountTestActivity::class.java).use { scenario ->
             SystemClock.sleep(2800)
             lateinit var home: StockerHomeView
             scenario.onActivity { activity ->

@@ -22,8 +22,12 @@ service cloud.firestore {
       allow get: if owner(uid);
       allow create: if owner(uid) && validProfile(uid)
         && getAfter(/databases/$(database)/documents/cpfClaims/$(request.resource.data.cpf)).data.uid == uid;
-      // Perfil imutável neste fluxo. Plano é informação cadastral, nunca permissão.
-      allow list, update, delete: if false;
+      // Nome é editável. E-mail só acompanha o endereço confirmado no Authentication.
+      // CPF, nascimento, CEP, plano e UID permanecem imutáveis.
+      allow update: if owner(uid) && validProfile(uid)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'lastName', 'email'])
+        && (request.resource.data.email == resource.data.email || request.auth.token.email_verified == true);
+      allow list, delete: if false;
     }
 
     // Reserva de CPF feita atomicamente com users/{uid}; evita duplicidade.

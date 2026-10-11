@@ -38,6 +38,61 @@ class AuthViewModelTest {
         verifyLogin(fail = true, destination = AuthScreen.LOGIN)
     }
 
+    @Test fun accountEditsKeepHomeAndOnlyPublishConfirmedDataForTheSameOwner() {
+        val initial = SignedInUser("account", "old@example.com", UserProfile("account", "João", "Silva",
+            LocalDate.of(1985, 10, 22), "12364578902", "old@example.com", "12345678", "basico"))
+        var writes = 0
+        var reject = false
+        val repository = object : AuthRepository {
+            override fun restoreSession() = initial
+            override fun registerAccount(email: String, password: String) = error("Unused")
+            override fun register(request: Registration) = error("Unused")
+            override fun login(email: String, password: String) = error("Unused")
+            override fun completeProfile(details: ProfileDetails) = error("Unused")
+            override fun requestPasswordReset(email: String) = Unit
+            override fun logout() = Unit
+            override fun updateName(uid: String, name: String, lastName: String): SignedInUser {
+                if (reject) throw IllegalArgumentException("Falha ao salvar")
+                writes++
+                return initial.copy(profile = initial.profile!!.copy(name = name, lastName = lastName))
+            }
+        }
+        val vm = AuthViewModel(repository)
+        store.put("account", vm)
+        val states = LinkedBlockingQueue<AuthUiState>()
+        val observer = Observer<AuthUiState> { states.offer(it) }
+        vm.state.observeForever(observer)
+        fun finished(): AuthUiState {
+            var state: AuthUiState
+            do { state = states.poll(5, TimeUnit.SECONDS) ?: error("Account operation timed out") } while (state.loading)
+            return state
+        }
+        try {
+            finished()
+            states.clear()
+            vm.editAccount(AccountEditRequest.Name("account", "Maria", "Souza"))
+            val loading = states.poll(5, TimeUnit.SECONDS)!!
+            assertEquals(AuthScreen.HOME, loading.screen)
+            assertEquals(AccountOperation.NAME, loading.accountOperation)
+            val success = finished()
+            assertEquals("Maria", success.user!!.profile!!.name)
+            assertEquals(AuthScreen.HOME, success.screen)
+            assertNull(success.accountOperation)
+            reject = true
+            states.clear()
+            vm.editAccount(AccountEditRequest.Name("account", "New", "Name"))
+            val failure = finished()
+            assertEquals(success.user, failure.user)
+            assertEquals("Falha ao salvar", failure.message)
+            states.clear()
+            vm.editAccount(AccountEditRequest.Name("other-account", "Other", "User"))
+            val wrongOwner = finished()
+            assertEquals(AuthScreen.LOGIN, wrongOwner.screen)
+            assertNull(wrongOwner.user)
+            assertEquals(1, writes)
+        } finally { vm.state.removeObserver(observer) }
+    }
+
     private fun verifyLogin(fail: Boolean, destination: AuthScreen) {
         val vm = AuthViewModel(FakeRepository(fail))
         store.put("auth", vm)
