@@ -27,6 +27,26 @@ test('owner creates profile atomically and reads it', async () => {
   await assertSucceeds(create(db('ana'), 'ana'));
   await assertSucceeds(getDoc(doc(db('ana'), 'users', 'ana')));
 });
+test('owner edits names while identity and personal identifiers stay immutable', async () => {
+  await assertSucceeds(create(db('ana'), 'ana'));
+  const ref = doc(db('ana'), 'users', 'ana');
+  await assertSucceeds(updateDoc(ref, { name: 'Maria Alice', lastName: 'de Souza' }));
+  for (const changes of [{ uid: 'bob' }, { cpf: '99999999999' }, { birthDate: '1999-01-01' },
+    { zipCode: '99999999' }, { plan: 'admin' }, { password: 'secret' }, { name: '' }, { lastName: '' }]) {
+    await assertFails(updateDoc(ref, changes));
+  }
+  await assertFails(updateDoc(doc(db('bob'), 'users', 'ana'), { name: 'Bob' }));
+});
+test('email updates require the verified Authentication email of the same owner', async () => {
+  await assertSucceeds(create(db('ana'), 'ana'));
+  await assertFails(updateDoc(doc(db('ana'), 'users', 'ana'), { email: 'new@example.com' }));
+  const unverified = env.authenticatedContext('ana', { email: 'new@example.com', email_verified: false }).firestore();
+  await assertFails(updateDoc(doc(unverified, 'users', 'ana'), { email: 'new@example.com' }));
+  const verified = env.authenticatedContext('ana', { email: 'new@example.com', email_verified: true }).firestore();
+  await assertSucceeds(updateDoc(doc(verified, 'users', 'ana'), { email: 'new@example.com' }));
+  const otherOwner = env.authenticatedContext('bob', { email: 'new@example.com', email_verified: true }).firestore();
+  await assertFails(updateDoc(doc(otherOwner, 'users', 'ana'), { email: 'new@example.com' }));
+});
 test('unauthenticated access and listing denied', async () => {
   await assertFails(create(env.unauthenticatedContext().firestore(), 'ana'));
   await assertFails(getDocs(collection(db('ana'), 'users')));

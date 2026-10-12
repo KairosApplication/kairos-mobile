@@ -5,8 +5,8 @@ O título é Ajustes; a aba continua identificada como Ajustes.
 
 | Grupo | Acesso | Destino |
 | --- | --- | --- |
-| Conta | Perfil | Template de Perfil, com dados da sessão e logout existente |
-| Conta | Segurança | Template de Segurança |
+| Conta | Perfil | Avatar, dados da sessão, resumo do trabalho e logout |
+| Conta | Segurança | Dados da conta e formulários de edição real no Firebase |
 | Preferências | Notificações | Template de Notificações |
 | Preferências | Aparência | Template de Aparência |
 | Suporte | Ajuda e Suporte | Template de ajuda com acesso a Falar com o suporte |
@@ -14,7 +14,7 @@ O título é Ajustes; a aba continua identificada como Ajustes.
 
 O segundo destino de ajuda/suporte é Suporte, correspondente ao futuro chatbot
 do frame `713:2397`. Nesta etapa não há atendimento ou envio de mensagens.
-As telas filhas usam `SettingsTemplateView` com o aviso Em breve; cada destino
+As demais telas filhas usam `SettingsTemplateView` com o aviso Em breve; cada destino
 tem uma chave em `SettingsDestination` para receber sua implementação específica.
 
 O botão Voltar e o retorno do sistema levam Suporte → Ajuda e Suporte →

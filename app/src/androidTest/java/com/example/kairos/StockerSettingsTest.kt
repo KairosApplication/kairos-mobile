@@ -10,7 +10,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.example.kairos.model.auth.SignedInUser
 import com.example.kairos.model.auth.UserProfile
-import com.example.kairos.view.MainActivity
+import com.example.kairos.view.AccountTestActivity
 import com.example.kairos.view.StockerHomeView
 import com.example.kairos.view.settings.SettingsDestination
 import com.example.kairos.viewmodel.StockerHomeUiState
@@ -30,7 +30,7 @@ class StockerSettingsTest {
     private fun title(home: StockerHomeView) = home.findViewById<TextView>(R.id.settings_screen_title).text.toString()
 
     @Test fun allSettingsDestinationsNavigateAndBackReturnsThroughTheirParents() {
-        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+        ActivityScenario.launch(AccountTestActivity::class.java).use { scenario ->
             SystemClock.sleep(2800)
             lateinit var home: StockerHomeView
             var logoutCalls = 0
@@ -59,7 +59,9 @@ class StockerSettingsTest {
                 for (destination in destinations) {
                     home.findViewById<View>(destination.viewId).performClick()
                     assertEquals(activity.getString(destination.title), title(home))
-                    assertNotNull(home.findViewById<View>(R.id.settings_template))
+                    if (destination == SettingsDestination.PROFILE) assertNotNull(home.findViewById<View>(R.id.account_profile_summary))
+                    else if (destination == SettingsDestination.SECURITY) assertNotNull(home.findViewById<View>(R.id.account_security_data))
+                    else assertNotNull(home.findViewById<View>(R.id.settings_template))
                     assertTrue(home.findViewById<View>(R.id.home_nav_config).isSelected)
                     assertEquals(View.VISIBLE, home.findViewById<View>(R.id.settings_back).visibility)
                     home.findViewById<View>(R.id.settings_back).performClick()
@@ -94,7 +96,7 @@ class StockerSettingsTest {
     }
 
     @Test fun nestedSettingsRestoreOnlyForTheirOwnerAndLogoutClearsTheDestination() {
-        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+        ActivityScenario.launch(AccountTestActivity::class.java).use { scenario ->
             SystemClock.sleep(2800)
             scenario.onActivity { activity ->
                 val original = StockerHomeView(activity, {}, {})

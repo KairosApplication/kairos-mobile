@@ -6,6 +6,7 @@ import com.google.firebase.FirebaseNetworkException
 import com.google.firebase.FirebaseTooManyRequestsException
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthException
+import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Source
 import java.util.concurrent.ExecutionException
@@ -35,8 +36,11 @@ class FirebaseAuthGateway(private val auth: FirebaseAuth) : AuthGateway {
     } catch (e: FirebaseAuthException) {
         val message = when (e.errorCode) {
             "ERROR_WEAK_PASSWORD" -> "A senha não atende à política do projeto Firebase."
-            "ERROR_EMAIL_ALREADY_IN_USE" -> "Não foi possível cadastrar. Tente entrar ou recuperar sua senha."
+            "ERROR_EMAIL_ALREADY_IN_USE" -> "Este e-mail não está disponível. Tente outro endereço."
             "ERROR_INVALID_EMAIL" -> "Informe um email válido."
+            "ERROR_WRONG_PASSWORD", "ERROR_INVALID_CREDENTIAL", "ERROR_INVALID_LOGIN_CREDENTIALS" -> "Confira o e-mail e a senha informados."
+            "ERROR_REQUIRES_RECENT_LOGIN" -> "Faça login novamente para confirmar essa alteração."
+            "ERROR_USER_TOKEN_EXPIRED", "ERROR_INVALID_USER_TOKEN", "ERROR_USER_DISABLED" -> throw AccountChangedException()
             "ERROR_OPERATION_NOT_ALLOWED" -> "Habilite Email/Senha no Firebase Authentication."
             else -> "Não foi possível autenticar. Confira email e senha ou recupere sua senha."
         }
@@ -71,9 +75,47 @@ class FirebaseAuthGateway(private val auth: FirebaseAuth) : AuthGateway {
     }
 
     override fun signOut() = auth.signOut()
+
+    override fun currentUid() = auth.currentUser?.uid
+
+    override fun refreshToken() {
+        val user = auth.currentUser ?: throw AccountChangedException()
+        user.getIdToken(true).resultInWorker()
+    }
+
+    private fun account(uid: String) = auth.currentUser?.takeIf { it.uid == uid } ?: throw AccountChangedException()
+
+    override fun requestEmailChange(uid: String, email: String, password: String) = translate {
+        val user = account(uid)
+        user.reauthenticate(EmailAuthProvider.getCredential(user.email ?: error("E-mail ausente."), password)).resultInWorker()
+        account(uid)
+        user.verifyBeforeUpdateEmail(email).resultInWorker()
+        Unit
+    }
+
+    override fun changePassword(uid: String, currentPassword: String, newPassword: String) = translate {
+        val user = account(uid)
+        user.reauthenticate(EmailAuthProvider.getCredential(user.email ?: error("E-mail ausente."), currentPassword)).resultInWorker()
+        account(uid)
+        user.updatePassword(newPassword).resultInWorker()
+        Unit
+    }
 }
 
 class FirestoreProfileStore(private val db: FirebaseFirestore) : ProfileStore {
+    private fun patch(uid: String, fields: Map<String, String>): UserProfile {
+        val ref = db.collection("users").document(uid)
+        return db.runTransaction { transaction ->
+            val previous = transaction.get(ref).data ?: error("Perfil não encontrado.")
+            val profile = UserProfile.fromDocument(previous)
+            check(profile.uid == uid) { "Perfil não corresponde à sessão." }
+            transaction.update(ref, fields)
+            UserProfile.fromDocument(previous + fields)
+        }.resultInWorker()
+    }
+
+    override fun updateName(uid: String, name: String, lastName: String) = patch(uid, mapOf("name" to name, "lastName" to lastName))
+    override fun updateEmail(uid: String, email: String) = patch(uid, mapOf("email" to email))
     override fun read(uid: String): UserProfile? {
         val document = db.collection("users").document(uid).get(Source.SERVER).resultInWorker()
         return document.data?.let(UserProfile::fromDocument)

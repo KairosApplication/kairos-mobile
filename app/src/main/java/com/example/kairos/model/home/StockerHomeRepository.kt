@@ -6,6 +6,8 @@ import java.time.temporal.ChronoUnit
 
 enum class HomeEventType { RESTOCK_REQUIRED, LOW_STOCK, ANALYSIS_COMPLETED }
 
+data class ProfileWorkSummary(val restocksThisWeek: Int, val damagesThisWeek: Int, val role: String, val market: String)
+
 data class HomeEvent(
     val id: String,
     val type: HomeEventType,
@@ -22,7 +24,8 @@ data class StockerHomeData(
     val history: List<HomeEvent>,
     val isDemo: Boolean,
     val restockingAlerts: List<RestockingRecord> = emptyList(),
-    val restockingHistory: List<RestockingRecord> = emptyList()
+    val restockingHistory: List<RestockingRecord> = emptyList(),
+    val profileWorkSummary: ProfileWorkSummary? = null
 )
 
 /** Blocking reads run outside the UI thread. The API adapter will implement this contract. */
@@ -67,6 +70,7 @@ class DemoStockerHomeRepository(private val clock: Clock = Clock.systemDefaultZo
                 today.minusDays(1).atTime(10, 25).atZone(clock.zone).toInstant())
         )
         return StockerHomeData(3, 2, alerts.take(2) + history.first(), alerts, history,
-            isDemo = true, restockingAlerts = restockingAlerts, restockingHistory = restockingHistory)
+            isDemo = true, restockingAlerts = restockingAlerts, restockingHistory = restockingHistory,
+            profileWorkSummary = ProfileWorkSummary(9, 8, "Repositor", "Aurora"))
     }
 }

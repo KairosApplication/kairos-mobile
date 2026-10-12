@@ -81,7 +81,7 @@ class MainActivity : AppCompatActivity() {
         root.addView(authEntry, FrameLayout.LayoutParams(-1, -1))
         homeView = StockerHomeView(this, onRetry = {
             vm.state.value?.user?.let { homeVm.load(it.uid, force = true) }
-        }, onLogout = vm::logout).apply { visibility = View.GONE }
+        }, onLogout = vm::logout, onAccountEdit = vm::editAccount).apply { visibility = View.GONE }
         root.addView(homeView, FrameLayout.LayoutParams(-1, -1))
         loadingView = LoadingView(this).apply { visibility = View.GONE }
         root.addView(loadingView, FrameLayout.LayoutParams(-1, -1))
@@ -105,7 +105,7 @@ class MainActivity : AppCompatActivity() {
             if (renderedScreen != state.screen) render(state)
             authEntry.update(state)
             if (state.screen == AuthScreen.HOME) {
-                homeView.updateSession(state.user, state.loading, state.message)
+                homeView.updateSession(state.user, state.loading, state.message, state.accountOperation)
                 state.user?.let { homeVm.load(it.uid) }
             }
             if (formScroll.visibility == View.VISIBLE) {
@@ -244,6 +244,7 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         homeView.refreshDate()
+        vm.refreshAccount()
     }
 
     override fun onDestroy() {
@@ -299,7 +300,7 @@ class MainActivity : AppCompatActivity() {
             authEntry.close()
             fields.clear()
             controls.clear()
-            homeView.updateSession(state.user, state.loading, state.message)
+            homeView.updateSession(state.user, state.loading, state.message, state.accountOperation)
             state.user?.let { homeVm.load(it.uid) }
             return
         }
