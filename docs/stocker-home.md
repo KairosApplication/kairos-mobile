@@ -5,8 +5,8 @@ Referência: [Home-Repositor no Figma](https://www.figma.com/design/OFMvU7yImxJF
 `StockerHomeView` substitui o destino provisório após autenticação e conclusão do
 perfil. Usa o nome da sessão e a data local. O conteúdo rola independentemente do
 menu inferior. A Home usa Montserrat SemiBold (peso 600); Alertas e Histórico
-usam Montserrat nos pesos do Figma. As telas anteriores do fluxo,
-incluindo login, cadastro e carregamento, mantêm suas fontes próprias.
+usam Montserrat nos pesos do Figma. Login, cadastro, onboarding e carregamento
+também usam Montserrat após a revisão de tipografia.
 
 Os ícones `drawable/home_*.xml` são conversões locais dos SVGs fornecidos pelo
 frame, feitas com o conversor Svg2Vector do Android Studio. `home_arrow_small`
@@ -24,7 +24,18 @@ preserva o espaço transparente do componente original; a seta visível é
 - Pendências abre Alertas; Concluídas abre Histórico. Essas abas apresentam os
   exemplos do repositório. Ajustes abre os acessos de conta, preferências e suporte;
   os dados da conta e a saída real ficam em Perfil. Veja [fluxo de ajustes](settings-flow.md).
-- Verificar gôndola informa que a função por foto ainda está indisponível.
+- Verificar gôndola informa que a função por foto ainda está indisponível e permite
+  abrir explicitamente uma demonstração do resultado da análise (frame `713:2503`),
+  em um diálogo de card com textos hierarquizados e ações temáticas, sem ícone
+  decorativo nem subtítulo redundante.
+  O resultado usa `ShelfAnalysis` do repositório de demonstração, foto original local,
+  contagens e seleção de produtos. As escolhas são restauradas apenas para o mesmo UID.
+  Alertas e eventos têm `analysisId`; Ver análise resolve o resultado associado,
+  validando a gôndola, e o ID da análise participa da restauração por UID.
+  Análises ausentes não abrem automaticamente outro exemplo. Registros concluídos
+  abrem um resultado de consulta, sem oferecer novamente Iniciar reposição.
+  Nenhuma imagem é enviada e nenhum estoque é alterado. O botão Iniciar reposição
+  informa que o fluxo operacional ainda depende da integração com o mercado.
 - Voltar nas abas retorna ao Início; voltar no Início encerra a atividade sem
   desconectar a conta. A aba selecionada é restaurada na recriação da atividade.
 
@@ -47,8 +58,10 @@ e [Histórico](https://www.figma.com/design/OFMvU7yImxJFUpV7e061Pj?node-id=713-1
   listas sem depender de recursos Android no modelo.
 - As três fotos de produtos em `drawable-nodpi/restock_*.png` são os originais
   dos frames. Os novos ícones `menu_*.xml` foram convertidos dos SVGs com o
-  Svg2Vector do Android Studio. O relógio selecionado inclui os dois retângulos
-  brancos sobrepostos no Figma.
+  Svg2Vector do Android Studio. O relógio selecionado, que usava dois retângulos
+  sobrepostos no Figma, foi revisado: os ponteiros agora são recortes transparentes
+  no vetor, assim como o centro da engrenagem. Não se aplica tintura global aos
+  ícones do menu; cada elemento usa o token de cor correspondente ao tema.
 - O menu mantém as suas views e anima a translação de um único indicador por
   280 ms. Os quatro ícones ficam preenchidos em verde quando selecionados e usam
   transição de opacidade. Início e Ajustes reutilizam os traçados dos ícones de

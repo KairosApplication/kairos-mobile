@@ -1,0 +1,11 @@
+<resources>
+    <string name="dialog_close">Fechar</string>
+    <string name="dialog_back">Voltar</string>
+    <string name="dialog_view_analysis">Ver análise</string>
+    <string name="dialog_shelf_guidance">Confira o resultado de uma gôndola</string>
+    <string name="dialog_shelf_description">A análise por foto está em desenvolvimento. Enquanto isso, explore um resultado demonstrativo para conhecer os produtos identificados e as necessidades de reposição.</string>
+    <string name="dialog_analysis_unavailable">Ainda não há uma análise vinculada a este registro.</string>
+    <string name="dialog_event_description">Consulte a análise desta gôndola para ver os produtos identificados e suas necessidades de reposição.</string>
+    <item name="info_primary" type="id" />
+    <item name="info_secondary" type="id" />
+</resources>

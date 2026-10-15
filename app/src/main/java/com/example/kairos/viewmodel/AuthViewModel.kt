@@ -15,8 +15,13 @@ data class AuthUiState(
     val loading: Boolean = false,
     val message: String = "",
     val user: SignedInUser? = null,
-    val accountOperation: AccountOperation? = null
-)
+    val accountOperation: AccountOperation? = null,
+    val accountOperationSucceeded: Boolean? = null
+) {
+    // A tela inicial LOGIN também existe enquanto a sessão está sendo restaurada.
+    val canStartOnboarding: Boolean
+        get() = !loading && user == null && screen in listOf(AuthScreen.LOGIN, AuthScreen.REGISTER)
+}
 
 class AuthViewModel(private val repository: AuthRepository?) : ViewModel() {
     private val mutableState = MutableLiveData(AuthUiState())
@@ -56,12 +61,14 @@ class AuthViewModel(private val repository: AuthRepository?) : ViewModel() {
     ) {
         val previous = mutableState.value!!
         if (previous.loading) return
-        mutableState.value = previous.copy(screen = loadingScreen ?: previous.screen, loading = true, message = "", accountOperation = accountOperation)
+        mutableState.value = previous.copy(screen = loadingScreen ?: previous.screen, loading = true, message = "", accountOperation = accountOperation,
+            accountOperationSucceeded = null)
         val startedAt = System.nanoTime()
         executor.execute {
+            var succeeded = false
             val result = try {
                 action(repository ?: throw IllegalArgumentException(
-                    "Adicione app/google-services.json para com.example.kairos e sincronize o Gradle."))
+                    "Adicione app/google-services.json para com.example.kairos e sincronize o Gradle.")).also { succeeded = true }
             } catch (e: AccountChangedException) {
                 AuthUiState(message = e.message.orEmpty())
             } catch (e: ProfileIncompleteException) {
@@ -76,7 +83,8 @@ class AuthViewModel(private val repository: AuthRepository?) : ViewModel() {
             val elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt)
             val remaining = (minimumLoadingMillis - elapsedMillis).coerceAtLeast(0L)
             if (!executor.isShutdown) executor.schedule({
-                mutableState.postValue(result.copy(loading = false, accountOperation = null))
+                mutableState.postValue(result.copy(loading = false, accountOperation = null,
+                    accountOperationSucceeded = accountOperation?.let { succeeded }))
             }, remaining, TimeUnit.MILLISECONDS)
         }
     }

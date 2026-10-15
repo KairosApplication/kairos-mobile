@@ -8,6 +8,7 @@ import com.example.kairos.model.auth.*
 import com.example.kairos.viewmodel.*
 import java.time.LocalDate
 import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import org.junit.After
 import org.junit.Assert.*
@@ -36,6 +37,57 @@ class AuthViewModelTest {
 
     @Test fun failedLoginReturnsToLoginWithError() {
         verifyLogin(fail = true, destination = AuthScreen.LOGIN)
+    }
+
+    @Test fun onboardingIsOnlyEligibleForIdleUnauthenticatedEntryScreens() {
+        val user = SignedInUser("restored", "test@example.com", null)
+        for (screen in AuthScreen.entries) {
+            val entry = screen == AuthScreen.LOGIN || screen == AuthScreen.REGISTER
+            assertEquals(entry, AuthUiState(screen).canStartOnboarding)
+            assertFalse(AuthUiState(screen, loading = true).canStartOnboarding)
+            assertFalse(AuthUiState(screen, user = user).canStartOnboarding)
+        }
+    }
+
+    @Test fun restoredCompleteSessionNeverOffersOnboarding() {
+        verifyRestoration(SignedInUser("restored", "test@example.com", UserProfile(
+            "restored", "Test", "User", LocalDate.of(2000, 1, 1), "", "test@example.com", "", ""
+        )), AuthScreen.HOME)
+    }
+
+    @Test fun restoredIncompleteSessionNeverOffersOnboarding() {
+        verifyRestoration(SignedInUser("restored", "test@example.com", null), AuthScreen.COMPLETE_PROFILE)
+    }
+
+    @Test fun missingSessionOffersOnboardingOnlyAfterRestorationFinishes() {
+        verifyRestoration(null, AuthScreen.LOGIN)
+    }
+
+    private fun verifyRestoration(user: SignedInUser?, destination: AuthScreen) {
+        val release = CountDownLatch(1)
+        val vm = AuthViewModel(object : FakeRepository(false) {
+            override fun restoreSession(): SignedInUser? {
+                check(release.await(5, TimeUnit.SECONDS))
+                return user
+            }
+        })
+        store.put("restoration", vm)
+        val states = LinkedBlockingQueue<AuthUiState>()
+        val observer = Observer<AuthUiState> { states.offer(it) }
+        vm.state.observeForever(observer)
+        try {
+            val restoring = states.poll(5, TimeUnit.SECONDS)!!
+            assertTrue(restoring.loading)
+            assertFalse(restoring.canStartOnboarding)
+            release.countDown()
+            val restored = states.poll(5, TimeUnit.SECONDS)!!
+            assertEquals(destination, restored.screen)
+            assertFalse(restored.loading)
+            assertEquals(user == null, restored.canStartOnboarding)
+        } finally {
+            release.countDown()
+            vm.state.removeObserver(observer)
+        }
     }
 
     @Test fun accountEditsKeepHomeAndOnlyPublishConfirmedDataForTheSameOwner() {
@@ -78,12 +130,14 @@ class AuthViewModelTest {
             assertEquals("Maria", success.user!!.profile!!.name)
             assertEquals(AuthScreen.HOME, success.screen)
             assertNull(success.accountOperation)
+            assertEquals(true, success.accountOperationSucceeded)
             reject = true
             states.clear()
             vm.editAccount(AccountEditRequest.Name("account", "New", "Name"))
             val failure = finished()
             assertEquals(success.user, failure.user)
             assertEquals("Falha ao salvar", failure.message)
+            assertEquals(false, failure.accountOperationSucceeded)
             states.clear()
             vm.editAccount(AccountEditRequest.Name("other-account", "Other", "User"))
             val wrongOwner = finished()
@@ -129,7 +183,45 @@ class AuthViewModelTest {
         }
     }
 
-    private class FakeRepository(private val fail: Boolean) : AuthRepository {
+    @Test fun incorrectCurrentPasswordPublishesFailureAndPreservesTheAccount() {
+        val user = SignedInUser("account", "old@example.com", UserProfile("account", "Test", "User",
+            LocalDate.of(2000, 1, 1), "", "old@example.com", "", ""))
+        val vm = AuthViewModel(object : FakeRepository(false) {
+            override fun restoreSession() = user
+            override fun requestEmailChange(uid: String, email: String, currentPassword: String): SignedInUser =
+                throw IllegalArgumentException("Senha atual incorreta. Confira a senha e tente novamente.")
+            override fun changePassword(uid: String, currentPassword: String, newPassword: String): SignedInUser =
+                throw IllegalArgumentException("Senha atual incorreta. Confira a senha e tente novamente.")
+        })
+        store.put("incorrect-password", vm)
+        val states = LinkedBlockingQueue<AuthUiState>()
+        val observer = Observer<AuthUiState> { states.offer(it) }
+        vm.state.observeForever(observer)
+        fun finished(): AuthUiState {
+            var state: AuthUiState
+            do { state = states.poll(5, TimeUnit.SECONDS) ?: error("Operation timed out") } while (state.loading)
+            return state
+        }
+        try {
+            finished()
+            for (request in listOf(AccountEditRequest.Email(user.uid, "new@example.com", "incorrect-password"),
+                AccountEditRequest.Password(user.uid, "incorrect-password", "new-password"))) {
+                states.clear()
+                vm.editAccount(request)
+                val loading = states.poll(5, TimeUnit.SECONDS)!!
+                assertTrue(loading.loading)
+                assertNull(loading.accountOperationSucceeded)
+                val failure = finished()
+                assertEquals(false, failure.accountOperationSucceeded)
+                assertEquals(user, failure.user)
+                assertEquals(AuthScreen.HOME, failure.screen)
+                assertTrue(failure.message.startsWith("Senha atual incorreta"))
+                assertFalse(failure.message.contains("sucesso"))
+            }
+        } finally { vm.state.removeObserver(observer) }
+    }
+
+    private open class FakeRepository(private val fail: Boolean) : AuthRepository {
         override fun restoreSession(): SignedInUser? = null
         override fun login(email: String, password: String): SignedInUser {
             if (fail) throw IllegalArgumentException("Login recusado")

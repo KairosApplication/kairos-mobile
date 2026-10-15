@@ -18,6 +18,7 @@ internal class AccountUiStyle(val context: Context, val scale: Float) {
     val font = requireNotNull(ResourcesCompat.getFont(context, R.font.montserrat_semibold))
     val ink = context.getColor(R.color.home_ink)
     val secondary = context.getColor(R.color.home_secondary)
+    val surface = context.getColor(R.color.home_surface)
     fun px(value: Float) = (value * density * scale).toInt()
     fun text(id: Int) = context.getString(id)
     fun label(value: String, size: Float, color: Int = ink, weight: Int = 600) = TextView(context).apply {
@@ -35,7 +36,7 @@ internal class AccountUiStyle(val context: Context, val scale: Float) {
     }
     fun card(action: (() -> Unit)? = null) = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
-        val shape = rounded(Color.WHITE, 20f, context.getColor(R.color.home_border))
+        val shape = rounded(surface, 20f, context.getColor(R.color.home_border))
         background = if (action == null) shape else RippleDrawable(ColorStateList.valueOf(0x14266D57), shape, null)
         elevation = px(5f).toFloat()
         outlineAmbientShadowColor = 0x1A05291A
@@ -47,6 +48,9 @@ internal class AccountUiStyle(val context: Context, val scale: Float) {
     }
     fun icon(resource: Int) = ImageView(context).apply {
         setImageResource(resource)
+        if (resource != R.drawable.account_logout) {
+            imageTintList = ColorStateList.valueOf(context.getColor(R.color.home_icon_accent))
+        }
         scaleType = ImageView.ScaleType.FIT_CENTER
         importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
     }

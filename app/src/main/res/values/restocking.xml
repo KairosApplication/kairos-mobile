@@ -10,6 +10,7 @@
     <string name="restocking_empty_recent">Nenhuma reposição concluída recentemente.</string>
     <string name="history_search">Buscar produto</string>
     <string name="history_filters">Filtrar histórico</string>
+    <string name="history_filters_description">Escolha o período, a gôndola e a ordem das reposições.</string>
     <string name="history_filters_active">Filtrar histórico (filtros ativos)</string>
     <string name="history_period">Período</string>
     <string name="history_all_dates">Todo o período</string>
@@ -36,5 +37,8 @@
     <item name="history_period" type="id" />
     <item name="history_shelf" type="id" />
     <item name="history_order" type="id" />
+    <item name="history_apply_action" type="id" />
+    <item name="history_cancel_action" type="id" />
+    <item name="history_clear_action" type="id" />
     <item name="home_nav_indicator" type="id" />
 </resources>

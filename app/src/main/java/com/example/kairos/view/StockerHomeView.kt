@@ -42,6 +42,8 @@ import com.example.kairos.model.home.RestockingStatus
 import com.example.kairos.viewmodel.StockerHomeUiState
 import com.example.kairos.view.settings.SettingsDestination
 import com.example.kairos.view.settings.SettingsTemplateView
+import com.example.kairos.view.settings.SettingsContentView
+import com.example.kairos.model.home.StockerPreferences
 import com.example.kairos.view.settings.ProfileView
 import com.example.kairos.view.settings.SecurityView
 import com.example.kairos.view.settings.AccountEditField
@@ -83,14 +85,14 @@ class StockerHomeView(
     private val backdrop = Paint()
     private var backdropTop = Float.NaN
     private var backdropBottom = Float.NaN
-    private val statusBarPaint = Paint().apply { color = 0xFF0D6249.toInt() }
-    private val headerEdgePaint = Paint().apply { color = 0xFF0A6A4F.toInt() }
+    private val statusBarPaint = Paint().apply { color = context.getColor(R.color.home_header_top) }
+    private val headerEdgePaint = Paint().apply { color = context.getColor(R.color.home_header_edge) }
     private val restockingBackground = object : Drawable() {
         private val surface = Paint(Paint.ANTI_ALIAS_FLAG)
         private val shape = Path()
         override fun onBoundsChange(bounds: Rect) {
             surface.shader = LinearGradient(0f, bounds.top.toFloat(), 0f, bounds.bottom.toFloat(),
-                intArrayOf(0xFFE5EFEC.toInt(), 0xFFF4EFEF.toInt(), 0xFFDEDEDE.toInt()),
+                intArrayOf(color(R.color.home_background_top), color(R.color.home_background_middle), color(R.color.home_background_bottom)),
                 floatArrayOf(0f, .86538f, 1f), Shader.TileMode.CLAMP)
             val radius = px(10f).toFloat()
             shape.reset()
@@ -140,7 +142,7 @@ class StockerHomeView(
     private val sectionHeader by lazy {
         FrameLayout(context).apply {
             background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(0xFF0D6249.toInt(), 0xFF0A6A4F.toInt()))
+                intArrayOf(color(R.color.home_header_top), color(R.color.home_header_edge)))
             addView(sectionHeaderTitle, LayoutParams(-1, -1))
             val touchSize = px(48f).coerceAtLeast((48 * density).toInt())
             addView(sectionHeaderBack, LayoutParams(touchSize, touchSize, Gravity.CENTER_VERTICAL or Gravity.START).apply {
@@ -150,6 +152,9 @@ class StockerHomeView(
     }
     private var indicatorReady = false
     private var historyFilter = HistoryFilter()
+    private var analysisVisible = false
+    private var analysisId: String? = null
+    private val selectedProducts = linkedSetOf<String>()
     private var pendingRestoredState: Bundle? = null
     private var settingsDestination = SettingsDestination.ROOT
     private var historyResults: LinearLayout? = null
@@ -159,6 +164,8 @@ class StockerHomeView(
     private var state = StockerHomeUiState()
     private var signingOut = false
     private var accountOperation: AccountOperation? = null
+    private var accountOperationSucceeded: Boolean? = null
+    private var accountEditor: AccountEditorDialog.Editor? = null
     private var sessionMessage = ""
     private var dialog: AlertDialog? = null
     private var topInset = 0
@@ -201,7 +208,7 @@ class StockerHomeView(
         backdropTop = top
         backdropBottom = bottom
         backdrop.shader = LinearGradient(0f, top, 0f, bottom,
-            intArrayOf(0xFFE5EFEC.toInt(), 0xFFF4EFEF.toInt(), 0xFFDEDEDE.toInt()),
+            intArrayOf(color(R.color.home_background_top), color(R.color.home_background_middle), color(R.color.home_background_bottom)),
             floatArrayOf(0f, .86538f, 1f), Shader.TileMode.CLAMP)
     }
 
@@ -222,16 +229,22 @@ class StockerHomeView(
         render()
     }
 
-    fun updateSession(value: SignedInUser?, busy: Boolean, message: String, operation: AccountOperation? = null) {
+    fun updateSession(value: SignedInUser?, busy: Boolean, message: String, operation: AccountOperation? = null,
+                      succeeded: Boolean? = null) {
         if (user != null && user?.uid != value?.uid) reset()
         if (user != null && user?.email != value?.email) close()
         val restored = applyRestoredState(value?.uid)
-        if (!restored && user == value && signingOut == busy && sessionMessage == message && accountOperation == operation) return
+        accountEditor?.bind(value, busy, message, operation, succeeded)
+        if (!restored && user == value && signingOut == busy && sessionMessage == message && accountOperation == operation &&
+            accountOperationSucceeded == succeeded) return
         user = value
         signingOut = busy
         sessionMessage = message
         accountOperation = operation
+        accountOperationSucceeded = succeeded
         dialog?.getButton(AlertDialog.BUTTON_POSITIVE)?.isEnabled = !busy
+        dialog?.findViewById<View>(R.id.info_primary)?.isEnabled = !busy && dialog?.findViewById<View>(R.id.info_primary)?.tag != "unavailable"
+        dialog?.findViewById<View>(R.id.info_secondary)?.isEnabled = !busy
         render()
     }
 
@@ -245,9 +258,15 @@ class StockerHomeView(
         putString("historyShelf", historyFilter.shelfCode)
         putBoolean("historyOldestFirst", historyFilter.oldestFirst)
         putString("settingsDestination", settingsDestination.name)
+        putBoolean("analysisVisible", analysisVisible)
+        putString("analysisId", analysisId)
+        putStringArrayList("selectedProducts", ArrayList(selectedProducts))
     }
     fun restore(saved: Bundle?) {
         close()
+        analysisVisible = false
+        analysisId = null
+        selectedProducts.clear()
         tab = Tab.START
         historyFilter = HistoryFilter()
         settingsDestination = SettingsDestination.ROOT
@@ -274,6 +293,10 @@ class StockerHomeView(
             SettingsDestination.entries.firstOrNull { it.name == saved.getString("settingsDestination") }
                 ?: SettingsDestination.ROOT
         } else SettingsDestination.ROOT
+        analysisVisible = saved.getBoolean("analysisVisible")
+        analysisId = saved.getString("analysisId")
+        selectedProducts.clear()
+        selectedProducts.addAll(saved.getStringArrayList("selectedProducts").orEmpty())
         indicatorReady = false
         return true
     }
@@ -284,11 +307,15 @@ class StockerHomeView(
         signingOut = false
         sessionMessage = ""
         accountOperation = null
+        accountOperationSucceeded = null
         render()
     }
 
     private fun clearAccountUi() {
         close()
+        analysisVisible = false
+        analysisId = null
+        selectedProducts.clear()
         tab = Tab.START
         historyFilter = HistoryFilter()
         settingsDestination = SettingsDestination.ROOT
@@ -300,6 +327,13 @@ class StockerHomeView(
     }
 
     fun handleBack(): Boolean {
+        if (analysisVisible) {
+            analysisVisible = false
+            analysisId = null
+            selectedProducts.clear()
+            render()
+            return true
+        }
         if (tab == Tab.CONFIG && settingsDestination != SettingsDestination.ROOT) {
             openSettings(settingsDestination.parent)
             return true
@@ -309,7 +343,7 @@ class StockerHomeView(
         return true
     }
 
-    fun close() { dialog?.dismiss(); dialog = null }
+    fun close() { dialog?.dismiss(); dialog = null; accountEditor = null }
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         ViewCompat.requestApplyInsets(this)
@@ -323,6 +357,9 @@ class StockerHomeView(
 
     private fun select(value: Tab) {
         if (signingOut) return
+        analysisVisible = false
+        analysisId = null
+        selectedProducts.clear()
         if (tab == value) {
             if (value == Tab.CONFIG && settingsDestination != SettingsDestination.ROOT) openSettings(SettingsDestination.ROOT)
             return
@@ -352,12 +389,18 @@ class StockerHomeView(
 
     private fun icon(resource: Int) = ImageView(context).apply {
         setImageResource(resource)
+        if (resource in listOf(R.drawable.home_summary_arrow, R.drawable.home_camera_arrow,
+                R.drawable.menu_search, R.drawable.menu_filter, R.drawable.settings_chevron,
+                R.drawable.settings_profile, R.drawable.settings_security, R.drawable.settings_notifications,
+                R.drawable.settings_appearance, R.drawable.settings_support, R.drawable.settings_info)) {
+            imageTintList = ColorStateList.valueOf(color(R.color.home_icon_accent))
+        }
         scaleType = ImageView.ScaleType.FIT_CENTER
         importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
     }
 
     private fun card(view: View, action: () -> Unit) {
-        view.background = RippleDrawable(ColorStateList.valueOf(0x14266D57), rounded(Color.WHITE, 20f, true), null)
+        view.background = RippleDrawable(ColorStateList.valueOf(0x14266D57), rounded(color(R.color.home_surface), 20f, true), null)
         view.elevation = px(5f).toFloat()
         view.outlineAmbientShadowColor = 0x1A05291A
         view.outlineSpotShadowColor = 0x1A05291A
@@ -379,7 +422,7 @@ class StockerHomeView(
         if (visibility == VISIBLE) {
             WindowCompat.getInsetsController(activity.window, this).apply {
                 isAppearanceLightStatusBars = false
-                isAppearanceLightNavigationBars = true
+                isAppearanceLightNavigationBars = resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK != android.content.res.Configuration.UI_MODE_NIGHT_YES
             }
         }
         val oldSearch = findViewById<EditText>(R.id.history_search)
@@ -389,16 +432,16 @@ class StockerHomeView(
         historyResults = null
         filterButton = null
         body.setPadding(0, 0, 0, px(20f))
-        sectionHeader.visibility = if (tab != Tab.START) VISIBLE else GONE
-        sectionHeaderTitle.text = str(when (tab) {
+        sectionHeader.visibility = if (tab != Tab.START || analysisVisible) VISIBLE else GONE
+        sectionHeaderTitle.text = if (analysisVisible) str(R.string.analysis_result_title) else str(when (tab) {
             Tab.ALERTS -> R.string.restocking_alerts_title
             Tab.HISTORY -> R.string.restocking_history_title
             Tab.CONFIG -> settingsDestination.title
             Tab.START -> R.string.home_start
         })
-        sectionHeaderBack.visibility = if (tab == Tab.CONFIG && settingsDestination != SettingsDestination.ROOT) VISIBLE else GONE
+        sectionHeaderBack.visibility = if (analysisVisible || tab == Tab.CONFIG && settingsDestination != SettingsDestination.ROOT) VISIBLE else GONE
         val headerPadding = if (sectionHeaderBack.visibility == VISIBLE) px(65f) else px(16f)
-        val accountPage = tab == Tab.CONFIG && settingsDestination in listOf(SettingsDestination.PROFILE, SettingsDestination.SECURITY)
+        val accountPage = analysisVisible || tab == Tab.CONFIG && settingsDestination != SettingsDestination.ROOT
         sectionHeaderTitle.gravity = if (accountPage) Gravity.CENTER_VERTICAL or Gravity.START else Gravity.CENTER
         sectionHeaderTitle.setPadding(if (accountPage) px(73f) else headerPadding, 0, if (accountPage) px(16f) else headerPadding, 0)
         sectionHeaderBack.setImageResource(if (accountPage) R.drawable.account_back else R.drawable.settings_chevron)
@@ -409,6 +452,12 @@ class StockerHomeView(
         sectionHeaderBack.isEnabled = !signingOut
         scroll.background = if (sectionHeader.visibility == VISIBLE && !(accountPage && settingsDestination == SettingsDestination.PROFILE))
             restockingBackground else null
+        navFrame.visibility = if (analysisVisible) GONE else VISIBLE
+        if (analysisVisible) {
+            renderAnalysisResult()
+            invalidate()
+            return
+        }
         if (tab == Tab.START) addHero()
         if (tab == Tab.CONFIG) {
             renderSettings()
@@ -449,14 +498,14 @@ class StockerHomeView(
     private fun addHero() {
         val hero = FrameLayout(context).apply { clipChildren = false; clipToPadding = false }
         val gradient = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-            intArrayOf(0xFF0D6249.toInt(), 0xFF047C58.toInt(), color(R.color.home_green))).apply {
+            intArrayOf(color(R.color.home_header_top), color(R.color.home_header_middle), color(R.color.home_header_bottom))).apply {
             val radius = px(24f).toFloat()
             cornerRadii = floatArrayOf(0f, 0f, 0f, 0f, radius, radius, radius, radius)
         }
         hero.addView(View(context).apply { background = gradient }, LayoutParams(-1, px(213f)))
         hero.addView(View(context).apply {
             background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(color(R.color.home_green), 0xFF007753.toInt())).apply { cornerRadius = px(23f).toFloat() }
+                intArrayOf(color(R.color.home_header_bottom), color(R.color.home_header_edge))).apply { cornerRadius = px(23f).toFloat() }
         }, LayoutParams(-1, px(68f), Gravity.BOTTOM).apply { setMargins(px(12f), 0, px(15f), 0) })
         val contents = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
@@ -476,10 +525,20 @@ class StockerHomeView(
             minimumHeight = px(111f)
             setPadding(px(20f), px(16f), px(14f), px(16f))
         }
-        card(verify) { showInfo(str(R.string.home_verify), str(R.string.home_camera_unavailable)) }
+        card(verify) {
+            close()
+            val available = state.data?.shelfAnalysis != null
+            dialog = InfoCardDialog.show(activity, scale, str(R.string.dialog_shelf_guidance),
+                str(R.string.dialog_shelf_description),
+                primary = str(R.string.analysis_demo_open), action = { openAnalysisResult() },
+                actionEnabled = available, demo = state.data?.isDemo == true)
+            if (!available) dialog?.findViewById<View>(R.id.info_primary)?.tag = "unavailable"
+        }
         val camera = FrameLayout(context).apply {
             background = rounded(color(R.color.home_camera_tile), 18f)
-            addView(icon(R.drawable.home_camera), LayoutParams(px(40f), px(40f), Gravity.CENTER))
+            addView(icon(R.drawable.home_camera).apply {
+                imageTintList = ColorStateList.valueOf(color(R.color.home_icon_accent))
+            }, LayoutParams(px(40f), px(40f), Gravity.CENTER))
         }
         verify.addView(camera, LinearLayout.LayoutParams(px(68f), px(68f)))
         val description = LinearLayout(context).apply {
@@ -550,7 +609,10 @@ class StockerHomeView(
             clipToOutline = true
             contentDescription = "$title. $subtitle"
         }
-        card(row) { showInfo(title, subtitle + if (state.data?.isDemo == true) "\n\n" + str(R.string.home_demo_description) else "") }
+        card(row) {
+            showAnalysisInfo(title, subtitle, str(R.string.dialog_event_description),
+                state.data?.analysisFor(event))
+        }
         val (colors, resource) = when (event.type) {
             HomeEventType.RESTOCK_REQUIRED -> intArrayOf(0xFFC73E36.toInt(), 0xFFE0382E.toInt()) to R.drawable.home_stop
             HomeEventType.LOW_STOCK -> intArrayOf(0xFFE0AB3D.toInt(), 0xFFE8A825.toInt()) to R.drawable.home_warning
@@ -585,7 +647,7 @@ class StockerHomeView(
             }
             val image = icon(item.icon).also { navIcons[item] = it; it.tag = item.icon }
             column.addView(image, LinearLayout.LayoutParams(px(32f), px(33f)))
-            val caption = label(str(item.label), 12f, color(R.color.home_green)).also { navLabels[item] = it }
+            val caption = label(str(item.label), 12f, color(R.color.home_nav_icon)).also { navLabels[item] = it }
             column.addView(caption,
                 LinearLayout.LayoutParams(-2, -2).apply { topMargin = px(3f) })
             nav.addView(column, LinearLayout.LayoutParams(0, -2, 1f))
@@ -595,6 +657,7 @@ class StockerHomeView(
             findViewById<View>(item.viewId).apply { isSelected = selected; isEnabled = !signingOut }
             navLabels[item]?.typeface = Typeface.create(montserrat, if (selected) 700 else 500, false)
             navLabels[item]?.fontVariationSettings = "'wght' ${if (selected) 700 else 500}"
+            navLabels[item]?.setTextColor(color(if (selected) R.color.home_active else R.color.home_nav_icon))
             val resource = when {
                 item == Tab.START && selected -> R.drawable.menu_house_active
                 item == Tab.CONFIG && selected -> R.drawable.menu_settings_active
@@ -604,6 +667,7 @@ class StockerHomeView(
                 else -> item.icon
             }
             navIcons[item]?.let { image ->
+                image.imageTintList = null
                 if (image.tag != resource) {
                     image.tag = resource
                     image.animate().withEndAction(null).cancel()
@@ -637,7 +701,7 @@ class StockerHomeView(
     }
 
     private fun sectionLabel(text: String, top: Float, parent: LinearLayout = body) {
-        parent.addView(label(text, 20f, 0xCC0F2B21.toInt()).apply {
+        parent.addView(label(text, 20f, color(R.color.home_heading)).apply {
             ViewCompat.setAccessibilityHeading(this, true)
         }, LinearLayout.LayoutParams(-1, -2).apply { setMargins(px(25f), px(top), px(19f), 0) })
     }
@@ -655,11 +719,11 @@ class StockerHomeView(
         completed.take(2).forEach { add(productCard(it), 10f) }
     }
 
-    private fun productCard(record: RestockingRecord): View {
+    private fun productCard(record: RestockingRecord, selectable: Boolean = false): View {
         val (statusColor, statusText, statusIcon) = when (record.status) {
-            RestockingStatus.REQUIRED -> Triple(0xFFDE3129.toInt(), R.string.restocking_required, R.drawable.home_stop)
-            RestockingStatus.LOW_STOCK -> Triple(0xFFE8A825.toInt(), R.string.restocking_low, R.drawable.home_warning)
-            RestockingStatus.COMPLETED -> Triple(0xFF05843B.toInt(), R.string.restocking_done, R.drawable.home_check)
+            RestockingStatus.REQUIRED -> Triple(color(R.color.home_danger), R.string.restocking_required, R.drawable.home_stop)
+            RestockingStatus.LOW_STOCK -> Triple(color(R.color.home_caution), R.string.restocking_low, R.drawable.home_warning)
+            RestockingStatus.COMPLETED -> Triple(color(R.color.home_success), R.string.restocking_done, R.drawable.home_check)
         }
         val date = record.occurredAt.atZone(ZoneId.systemDefault())
         val elapsed = Duration.between(record.occurredAt, Instant.now()).toMinutes()
@@ -668,13 +732,19 @@ class StockerHomeView(
         val subtitle = str(R.string.home_event_subtitle, record.shelfCode, time)
         val row = LinearLayout(context).apply {
             minimumHeight = px(92f)
+            tag = record.id
             gravity = Gravity.CENTER_VERTICAL
             clipToOutline = true
             contentDescription = "${record.productName}. $subtitle. ${str(statusText)}"
         }
-        card(row) { showInfo(record.productName, "$subtitle\n${str(statusText)}") }
+        card(row) {
+            if (selectable) {
+                if (!selectedProducts.add(record.id)) selectedProducts.remove(record.id)
+                render()
+            } else showAnalysisInfo(record.productName, subtitle, str(statusText), state.data?.analysisFor(record))
+        }
         val thumbnail = FrameLayout(context).apply {
-            background = rounded(Color.WHITE, 20f, true)
+            background = rounded(color(R.color.home_image_tile), 20f, true)
             val image = when (record.imageKey) {
                 "cola" -> R.drawable.restock_cola
                 "biscuits" -> R.drawable.restock_biscuits
@@ -692,7 +762,7 @@ class StockerHomeView(
             orientation = LinearLayout.VERTICAL
             setPadding(px(15f), px(12f), px(6f), px(12f))
             addView(label(record.productName, 15.5f))
-            addView(label(subtitle, 14f, 0xFF617D70.toInt()).apply {
+            addView(label(subtitle, 14f, secondary).apply {
                 typeface = Typeface.create(montserrat, 400, false)
                 fontVariationSettings = "'wght' 400"
             }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(4f) })
@@ -704,11 +774,102 @@ class StockerHomeView(
             RestockingStatus.LOW_STOCK -> intArrayOf(0xFFE0AB3D.toInt(), 0xFFE8A825.toInt())
             RestockingStatus.COMPLETED -> intArrayOf(0xFF0C8449.toInt(), 0xFF0A874A.toInt())
         }
-        row.addView(FrameLayout(context).apply {
+        if (selectable) row.addView(CheckBox(context).apply {
+            id = View.generateViewId()
+            tag = record.id
+            contentDescription = str(R.string.analysis_select_product, record.productName)
+            buttonTintList = ColorStateList.valueOf(color(R.color.home_active))
+            isChecked = record.id in selectedProducts
+            isEnabled = !signingOut
+            minimumWidth = (48 * density).toInt()
+            minimumHeight = (48 * density).toInt()
+            setOnCheckedChangeListener { _, checked ->
+                if (checked) selectedProducts.add(record.id) else selectedProducts.remove(record.id)
+                findViewById<View>(R.id.analysis_start)?.isEnabled = selectedProducts.isNotEmpty() && !signingOut
+            }
+        }, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = px(10f) })
+        else row.addView(FrameLayout(context).apply {
             background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, colors)
             addView(icon(statusIcon), LayoutParams(px(21f), px(21f), Gravity.CENTER))
         }, LinearLayout.LayoutParams(px(55f), -1))
         return row
+    }
+
+    private fun openAnalysisResult(id: String? = state.data?.shelfAnalysis?.id) {
+        if (signingOut || state.data?.analysis(id) == null) return
+        close()
+        analysisVisible = true
+        analysisId = id
+        selectedProducts.clear()
+        render()
+        scroll.scrollTo(0, 0)
+    }
+
+    /** Figma 713:2503. Selection is local and never reports a real stock update. */
+    private fun renderAnalysisResult() {
+        val analysis = state.data?.analysis(analysisId ?: state.data?.shelfAnalysis?.id)
+        if (analysis == null) {
+            add(label(str(when {
+                state.failed -> R.string.home_error
+                state.data != null -> R.string.dialog_analysis_unavailable
+                else -> R.string.home_loading
+            }), 18f), 30f)
+            if (state.failed) add(textButton(str(R.string.home_retry), onRetry), 16f)
+            return
+        }
+        val pending = analysis.products.any { it.status != RestockingStatus.COMPLETED }
+        selectedProducts.retainAll(analysis.products.filter { it.status != RestockingStatus.COMPLETED }.map { it.id }.toSet())
+        val shelf = LinearLayout(context).apply {
+            minimumHeight = px(99f)
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(px(9f), px(9f), px(15f), px(9f))
+        }
+        card(shelf) {}
+        shelf.addView(icon(R.drawable.restock_shelf).apply {
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            background = rounded(color(R.color.home_surface), 15f)
+            clipToOutline = true
+        }, LinearLayout.LayoutParams(px(128f), px(82f)))
+        shelf.addView(LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(label(str(R.string.analysis_shelf, analysis.shelfCode), 24f))
+            addView(label(str(R.string.analysis_location, analysis.aisle, analysis.sector), 16f, secondary))
+        }, LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = px(24f) })
+        add(shelf, 30f, 17f)
+        fun summary(text: String, tint: Int, resource: Int) {
+            val row = LinearLayout(context).apply {
+                gravity = Gravity.CENTER_VERTICAL
+                minimumHeight = px(56f)
+                background = rounded(color(R.color.home_surface), 20f, true)
+                clipToOutline = true
+            }
+            row.addView(FrameLayout(context).apply {
+                background = rounded(tint, 0f)
+                addView(icon(resource), LayoutParams(px(21f), px(21f), Gravity.CENTER))
+            }, LinearLayout.LayoutParams(px(39f), px(56f)))
+            row.addView(label(text, 15.5f), LinearLayout.LayoutParams(0, -2, 1f).apply {
+                setMargins(px(20f), px(12f), px(12f), px(12f))
+            })
+            add(row, 12f)
+        }
+        summary(resources.getQuantityString(R.plurals.analysis_missing, analysis.products.count { it.status == RestockingStatus.REQUIRED },
+            analysis.products.count { it.status == RestockingStatus.REQUIRED }), 0xFFE0382E.toInt(), R.drawable.home_stop)
+        summary(resources.getQuantityString(R.plurals.home_low_stock_title, analysis.products.count { it.status == RestockingStatus.LOW_STOCK },
+            analysis.products.count { it.status == RestockingStatus.LOW_STOCK }), 0xFFE8A825.toInt(), R.drawable.home_warning)
+        summary(str(R.string.analysis_product_count, analysis.analyzedProducts), 0xFF0A874A.toInt(), R.drawable.home_check)
+        heading(if (pending) R.string.analysis_products else R.string.analysis_review_products, 20f)
+        analysis.products.forEach { add(productCard(it, selectable = it.status != RestockingStatus.COMPLETED), 10f) }
+        if (pending) {
+            add(textButton(str(R.string.analysis_start)) {
+                showInfo(str(R.string.analysis_start), str(R.string.analysis_demo_only))
+            }.apply {
+                id = R.id.analysis_start
+                isEnabled = selectedProducts.isNotEmpty() && !signingOut
+                minimumHeight = px(59f)
+                background = rounded(color(R.color.home_button), 50f)
+            }, 35f, 81f)
+        }
+        if (state.data?.isDemo == true) add(label(str(R.string.home_demo), 12f, secondary).apply { gravity = Gravity.CENTER }, 16f)
     }
 
     private fun renderHistory() {
@@ -717,7 +878,7 @@ class StockerHomeView(
             gravity = Gravity.CENTER_VERTICAL
             minimumHeight = px(62f).coerceAtLeast((48 * density).toInt())
             setPadding(px(24f), px(5f), px(10f), px(5f))
-            background = rounded(Color.WHITE, 100f, true)
+            background = rounded(color(R.color.home_surface), 100f, true)
             elevation = px(5f).toFloat()
             outlineAmbientShadowColor = 0x1A05291A
             outlineSpotShadowColor = 0x1A05291A
@@ -731,7 +892,7 @@ class StockerHomeView(
             typeface = Typeface.create(montserrat, 500, false)
             fontVariationSettings = "'wght' 500"
             setTextColor(ink)
-            setHintTextColor(0xFF636F6A.toInt())
+            setHintTextColor(secondary)
             background = null
             inputType = InputType.TYPE_CLASS_TEXT
             isSingleLine = true
@@ -813,23 +974,47 @@ class StockerHomeView(
 
     private fun showHistoryFilters() {
         close()
-        val panel = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(px(24f), px(12f), px(24f), px(12f))
-        }
+        val panel = InfoCardDialog.panel(activity, scale)
+        panel.addView(label(str(R.string.history_filters), 22f).apply {
+            ViewCompat.setAccessibilityHeading(this, true)
+        }, LinearLayout.LayoutParams(-1, -2))
+        panel.addView(label(str(R.string.history_filters_description), 15f, secondary).apply {
+            typeface = Typeface.create(montserrat, 400, false)
+            fontVariationSettings = "'wght' 400"
+            setLineSpacing(px(3f).toFloat(), 1f)
+        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(10f) })
         fun choices(title: Int, viewId: Int, values: Array<String>, selected: Int): Spinner {
-            panel.addView(label(str(title), 16f), LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(12f) })
+            panel.addView(label(str(title), 14f, secondary),
+                LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(20f); bottomMargin = px(8f) })
             return Spinner(context, Spinner.MODE_DROPDOWN).apply {
                 id = viewId
+                contentDescription = str(title)
+                background = RippleDrawable(ColorStateList.valueOf(0x228CD9B8),
+                    rounded(color(R.color.home_background_top), 14f, true), null)
+                minimumHeight = px(52f).coerceAtLeast((48 * density).toInt())
+                setPadding(0, 0, 0, 0)
+                setPopupBackgroundDrawable(rounded(color(R.color.home_surface), 14f, true))
+                dropDownWidth = ViewGroup.LayoutParams.MATCH_PARENT
                 adapter = object : ArrayAdapter<String>(context, android.R.layout.simple_spinner_item, values) {
-                    init { setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
                     override fun getView(position: Int, convertView: View?, parent: ViewGroup): View =
-                        super.getView(position, convertView, parent).also(::applyMontserrat)
+                        LinearLayout(context).apply {
+                            gravity = Gravity.CENTER_VERTICAL
+                            setPadding(px(16f), px(14f), px(14f), px(14f))
+                            addView(label(values[position], 16f),
+                                LinearLayout.LayoutParams(0, -2, 1f))
+                            addView(icon(R.drawable.settings_chevron).apply { rotation = 90f },
+                                LinearLayout.LayoutParams(px(20f), px(20f)).apply { marginStart = px(12f) })
+                        }
                     override fun getDropDownView(position: Int, convertView: View?, parent: ViewGroup): View =
-                        super.getDropDownView(position, convertView, parent).also(::applyMontserrat)
+                        label(values[position], 16f).apply {
+                            minimumHeight = (48 * density).toInt()
+                            gravity = Gravity.CENTER_VERTICAL
+                            setPadding(px(16f), px(14f), px(16f), px(14f))
+                            setBackgroundColor(color(R.color.home_surface))
+                        }
                 }
                 setSelection(selected)
-                panel.addView(this, LinearLayout.LayoutParams(-1, px(48f)))
+                panel.addView(this, LinearLayout.LayoutParams(-1, -2))
             }
         }
         val shelves = state.data?.restockingHistory.orEmpty().map { it.shelfCode }.distinct().sorted()
@@ -839,19 +1024,33 @@ class StockerHomeView(
             (shelves.indexOf(historyFilter.shelfCode) + 1).coerceAtLeast(0))
         val order = choices(R.string.history_order, R.id.history_order,
             arrayOf(str(R.string.history_newest), str(R.string.history_oldest)), if (historyFilter.oldestFirst) 1 else 0)
-        dialog = AlertDialog.Builder(activity).setTitle(R.string.history_filters).setView(panel)
-            .setPositiveButton(R.string.history_apply) { _, _ ->
+        lateinit var filterDialog: AlertDialog
+        panel.addView(InfoCardDialog.button(activity, scale, str(R.string.history_apply), true).apply {
+            id = R.id.history_apply_action
+            setOnClickListener {
+                filterDialog.dismiss()
                 historyFilter = historyFilter.copy(period = HistoryPeriod.entries[period.selectedItemPosition],
                     shelfCode = shelves.getOrNull(shelf.selectedItemPosition - 1), oldestFirst = order.selectedItemPosition == 1)
                 renderHistoryResults()
             }
-            .setNeutralButton(R.string.history_clear) { _, _ ->
-                historyFilter = HistoryFilter()
-                findViewById<EditText>(R.id.history_search)?.setText("")
-                renderHistoryResults()
-            }
-            .setNegativeButton(R.string.history_cancel, null).show()
-        dialog?.window?.decorView?.let(::applyMontserrat)
+        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(24f) })
+        panel.addView(LinearLayout(context).apply {
+            addView(InfoCardDialog.button(activity, scale, str(R.string.history_cancel), false).apply {
+                id = R.id.history_cancel_action
+                setOnClickListener { filterDialog.dismiss() }
+            }, LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = px(4f) })
+            addView(InfoCardDialog.button(activity, scale, str(R.string.history_clear), false).apply {
+                id = R.id.history_clear_action
+                setOnClickListener {
+                    filterDialog.dismiss()
+                    historyFilter = HistoryFilter()
+                    findViewById<EditText>(R.id.history_search)?.setText("")
+                    renderHistoryResults()
+                }
+            }, LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = px(4f) })
+        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(8f) })
+        filterDialog = InfoCardDialog.present(activity, scale, panel)
+        dialog = filterDialog
     }
 
     private fun openSettings(destination: SettingsDestination) {
@@ -863,6 +1062,14 @@ class StockerHomeView(
     }
 
     private fun renderSettings() {
+        if (settingsDestination in listOf(SettingsDestination.NOTIFICATIONS, SettingsDestination.APPEARANCE, SettingsDestination.HELP)) {
+            val uid = user?.uid ?: return
+            val preferences = StockerPreferences(context, uid)
+            body.addView(SettingsContentView(context, scale, settingsDestination, preferences, signingOut,
+                { preferences.applyTheme(activity) }, { openSettings(SettingsDestination.SUPPORT) }, ::showInfo),
+                LinearLayout.LayoutParams(-1, -2))
+            return
+        }
         if (settingsDestination == SettingsDestination.PROFILE) {
             body.addView(ProfileView(context, scale, user, state.data?.profileWorkSummary, state.data?.isDemo == true,
                 signingOut, if (accountOperation == null) R.string.home_logging_out else R.string.account_saving,
@@ -875,7 +1082,7 @@ class StockerHomeView(
         }
         if (settingsDestination != SettingsDestination.ROOT) {
             add(SettingsTemplateView(context, scale).apply {
-                background = rounded(Color.WHITE, 20f, true)
+                background = rounded(color(R.color.home_surface), 20f, true)
             }, 24f, 21f)
             when (settingsDestination) {
                 SettingsDestination.HELP -> addSettingsCard(SettingsDestination.SUPPORT, 16f)
@@ -902,10 +1109,11 @@ class StockerHomeView(
             return
         }
         close()
-        dialog = AccountEditorDialog.show(activity, scale, current, field) { request ->
+        accountEditor = AccountEditorDialog.show(activity, scale, current, field) { request ->
             require(user?.uid == request.uid && !signingOut) { "A sessão mudou. Faça login novamente." }
             submit(request)
         }
+        dialog = accountEditor?.dialog
     }
 
     private fun addSettingsCard(destination: SettingsDestination, top: Float) {
@@ -920,14 +1128,14 @@ class StockerHomeView(
         }
         card(row) { openSettings(destination) }
         row.addView(FrameLayout(context).apply {
-            background = rounded(0x66B3D5C3, 50f)
+            background = rounded(color(R.color.home_subtle_tile), 50f)
             val iconSize = if (destination == SettingsDestination.PROFILE) 40f else 30f
             addView(icon(destination.icon), LayoutParams(px(iconSize), px(iconSize), Gravity.CENTER))
         }, LinearLayout.LayoutParams(px(48f), px(48f)))
         row.addView(LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             addView(label(title, 17f))
-            addView(label(str(destination.description), 15f, 0xB30F2B21.toInt()).apply {
+            addView(label(str(destination.description), 15f, secondary).apply {
                 typeface = Typeface.create(montserrat, 500, false)
                 fontVariationSettings = "'wght' 500"
             }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(2f) })
@@ -942,16 +1150,27 @@ class StockerHomeView(
         text = title
         isAllCaps = false
         typeface = Typeface.create(montserrat, 600, false)
-        setTextColor(Color.WHITE)
-        backgroundTintList = ColorStateList.valueOf(color(R.color.home_green))
+        setTextColor(ColorStateList(arrayOf(intArrayOf(-android.R.attr.state_enabled), intArrayOf()),
+            intArrayOf(secondary, color(R.color.home_button_text))))
+        backgroundTintList = ColorStateList(arrayOf(intArrayOf(-android.R.attr.state_enabled), intArrayOf()),
+            intArrayOf(color(R.color.home_button_disabled), color(R.color.home_button)))
         setOnClickListener { action() }
     }
 
     private fun showInfo(title: String, message: String) {
         close()
-        dialog = AlertDialog.Builder(activity).setTitle(title).setMessage(message)
-            .setPositiveButton(R.string.home_ok, null).show()
-        dialog?.window?.decorView?.let(::applyMontserrat)
+        dialog = InfoCardDialog.show(activity, scale, title, message)
+    }
+
+    private fun showAnalysisInfo(title: String, subtitle: String, message: String,
+                                 analysis: com.example.kairos.model.home.ShelfAnalysis?) {
+        close()
+        dialog = InfoCardDialog.show(activity, scale, title,
+            message + if (analysis == null) "\n\n" + str(R.string.dialog_analysis_unavailable) else "",
+            subtitle, str(R.string.dialog_view_analysis),
+            action = { analysis?.let { openAnalysisResult(it.id) } }, actionEnabled = analysis != null,
+            demo = state.data?.isDemo == true)
+        if (analysis == null) dialog?.findViewById<View>(R.id.info_primary)?.tag = "unavailable"
     }
 
     private fun applyMontserrat(view: View) {

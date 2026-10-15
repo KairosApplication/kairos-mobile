@@ -1,0 +1,27 @@
+<resources>
+    <color name="home_header_top">#163D2D</color>
+    <color name="home_header_middle">#1E513B</color>
+    <color name="home_header_bottom">#173B2C</color>
+    <color name="home_header_edge">#194531</color>
+    <color name="home_surface">#1D2C26</color>
+    <color name="home_background_top">#111C17</color>
+    <color name="home_background_middle">#14221B</color>
+    <color name="home_background_bottom">#101A16</color>
+    <color name="home_ink">#ECF3EE</color>
+    <color name="home_heading">#D9E9DE</color>
+    <color name="home_secondary">#A7B9AE</color>
+    <color name="home_border">#34483C</color>
+    <color name="home_nav">#182720</color>
+    <color name="home_nav_icon">#94B4A2</color>
+    <color name="home_active">#8CD9B8</color>
+    <color name="home_icon_accent">#8CD9B8</color>
+    <color name="home_camera_tile">#284C3B</color>
+    <color name="home_subtle_tile">#284333</color>
+    <color name="home_image_tile">#E7EDE8</color>
+    <color name="home_danger">#FF9D91</color>
+    <color name="home_caution">#EBC77B</color>
+    <color name="home_success">#91DBB4</color>
+    <color name="home_button">#8CD9B8</color>
+    <color name="home_button_text">#10291D</color>
+    <color name="home_button_disabled">#304238</color>
+</resources>

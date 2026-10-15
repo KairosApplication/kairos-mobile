@@ -20,6 +20,8 @@ class LoadingView(context: Context) : View(context) {
     private val backgroundPaint = Paint()
     private val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
+        typeface = android.graphics.Typeface.create(
+            androidx.core.content.res.ResourcesCompat.getFont(context, R.font.montserrat), 600, false)
     }
     private var dots = 1
     private val tick = object : Runnable {

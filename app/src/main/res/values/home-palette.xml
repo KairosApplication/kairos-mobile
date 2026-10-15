@@ -1,0 +1,16 @@
+<resources>
+    <color name="home_header_top">#0D6249</color>
+    <color name="home_header_middle">#047C58</color>
+    <color name="home_header_bottom">#1B4D3E</color>
+    <color name="home_header_edge">#0A6A4F</color>
+    <color name="home_nav_icon">#1B4D3E</color>
+    <color name="home_icon_accent">#266D57</color>
+    <color name="home_image_tile">#FFFFFF</color>
+    <color name="home_subtle_tile">#E5F5EB</color>
+    <color name="home_danger">#C52F27</color>
+    <color name="home_caution">#8B5B00</color>
+    <color name="home_success">#087343</color>
+    <color name="home_button">#1B4D3E</color>
+    <color name="home_button_text">#FFFFFF</color>
+    <color name="home_button_disabled">#D4DFD9</color>
+</resources>
