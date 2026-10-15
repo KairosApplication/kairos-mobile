@@ -35,9 +35,9 @@ import com.google.android.material.bottomsheet.BottomSheetDialog
 class AuthEntryView(private val activity: AppCompatActivity, private val vm: AuthViewModel) : FrameLayout(activity) {
     private val green = Color.rgb(27, 77, 63)
     private val density = resources.displayMetrics.density
-    private val scale get() = (resources.displayMetrics.widthPixels / density / 412f).coerceAtMost(1.3f)
+    private val scale get() = (resources.displayMetrics.widthPixels / density / 412f).coerceAtMost(1f)
     private fun px(value: Float) = (value * scale * density).toInt()
-    private val inter = ResourcesCompat.getFont(context, R.font.inter)!!
+    private val montserrat = ResourcesCompat.getFont(context, R.font.montserrat)!!
     private var dialog: BottomSheetDialog? = null
     private var registration = false
     private var replacing = false
@@ -75,12 +75,12 @@ class AuthEntryView(private val activity: AppCompatActivity, private val vm: Aut
         })
         listOf("Cadastrar" to true, "Entrar" to false).forEach { (title, register) ->
             val button = action(title, if (register) Color.WHITE else Color.BLACK,
-                if (register) Color.BLACK else Color.WHITE, 24f, 500) {
+                if (register) Color.BLACK else Color.WHITE, 20f, 600) {
                 if (register) vm.navigate(AuthScreen.REGISTER) else openSheet(false)
             }
             landingControls.add(button)
-            content.addView(button, LinearLayout.LayoutParams(px(281.6f), px(68.8f)).apply {
-                setMargins(px(31f), 0, px(29f), if (register) px(29f) else 0)
+            content.addView(button, LinearLayout.LayoutParams(px(281.6f), px(58f)).apply {
+                setMargins(px(31f), 0, px(29f), if (register) px(18f) else 0)
             })
         }
         content.addView(Space(context), LinearLayout.LayoutParams(1, 0, 28f))
@@ -99,7 +99,8 @@ class AuthEntryView(private val activity: AppCompatActivity, private val vm: Aut
         text = value
         setTextSize(TypedValue.COMPLEX_UNIT_SP, size * scale)
         setTextColor(color)
-        typeface = Typeface.create(Typeface.DEFAULT, weight, false)
+        typeface = Typeface.create(montserrat, weight, false)
+        fontVariationSettings = "'wght' $weight"
         gravity = Gravity.CENTER
         includeFontPadding = false
     }
@@ -109,20 +110,25 @@ class AuthEntryView(private val activity: AppCompatActivity, private val vm: Aut
         cornerRadius = px(radius).toFloat()
     }
 
-    private fun action(title: String, background: Int, foreground: Int, size: Float = 28.57f,
-                       weight: Int = 600, click: () -> Unit) = androidx.appcompat.widget.AppCompatButton(context).apply {
+    private fun action(title: String, background: Int, foreground: Int, size: Float = 18f,
+                       weight: Int = 600, radius: Float = 100f, click: () -> Unit) = androidx.appcompat.widget.AppCompatButton(context).apply {
         text = title
         isAllCaps = false
         setTextColor(foreground)
         setTextSize(TypedValue.COMPLEX_UNIT_SP, size * scale)
-        typeface = Typeface.create(Typeface.DEFAULT, weight, false)
-        backgroundTintList = null
+        typeface = Typeface.create(montserrat, weight, false)
+        fontVariationSettings = "'wght' $weight"
+        ViewCompat.setBackgroundTintList(this, null)
         this.background = android.graphics.drawable.RippleDrawable(
-            ColorStateList.valueOf(0x22000000), rounded(background, 100f), null)
+            ColorStateList.valueOf(0x22000000), rounded(background, radius), null)
         setPadding(0, 0, 0, 0)
         minHeight = 0
         minimumHeight = 0
         stateListAnimator = null
+        elevation = 0f
+        translationZ = 0f
+        outlineProvider = null
+        includeFontPadding = false
         setOnClickListener { click() }
     }
 
@@ -172,24 +178,35 @@ class AuthEntryView(private val activity: AppCompatActivity, private val vm: Aut
             background = rounded(green, 2.5f)
             importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
         }, LinearLayout.LayoutParams(px(111f), px(5f)).apply { gravity = Gravity.CENTER_HORIZONTAL })
-        space(32f)
-        panel.addView(label(if (register) "Cadastro" else "Login", 34.506f, weight = 700).apply {
-            typeface = Typeface.create(inter, 700, false)
+        space(24f)
+        panel.addView(label(if (register) "Cadastro" else "Login", 28f, weight = 700).apply {
+            typeface = Typeface.create(montserrat, 700, false)
+            fontVariationSettings = "'wght' 700"
             ViewCompat.setAccessibilityHeading(this, true)
-        }, LinearLayout.LayoutParams(-1, px(42f)))
-        space(31.5f)
+        }, LinearLayout.LayoutParams(-1, px(36f)))
+        space(24f)
         fun input(key: String, title: String, password: Boolean) {
             val edit = androidx.appcompat.widget.AppCompatEditText(context).apply {
                 hint = title
                 contentDescription = title
                 inputType = InputType.TYPE_CLASS_TEXT or if (password) InputType.TYPE_TEXT_VARIATION_PASSWORD else InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
-                typeface = Typeface.create(Typeface.DEFAULT, 500, false)
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f * scale)
+                typeface = Typeface.create(montserrat, 500, false)
+                fontVariationSettings = "'wght' 500"
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f * scale)
                 setTextColor(Color.BLACK)
                 setHintTextColor(Color.rgb(116, 116, 116))
-                backgroundTintList = null
-                background = rounded(Color.rgb(207, 207, 207), 20f)
-                setPadding(px(20f), 0, px(20f), 0)
+                ViewCompat.setBackgroundTintList(this, null)
+                fun fieldBackground(focused: Boolean) = rounded(Color.rgb(241, 243, 241), 14f).apply {
+                    setStroke(px(if (focused) 2f else 1f).coerceAtLeast(1),
+                        if (focused) green else Color.rgb(218, 224, 219))
+                }
+                background = android.graphics.drawable.StateListDrawable().apply {
+                    addState(intArrayOf(android.R.attr.state_focused), fieldBackground(true))
+                    addState(intArrayOf(), fieldBackground(false))
+                }
+                setPadding(px(16f), 0, px(16f), 0)
+                gravity = Gravity.CENTER_VERTICAL
+                includeFontPadding = false
                 setSingleLine(true)
                 if (password) transformationMethod = android.text.method.PasswordTransformationMethod.getInstance()
                 isSaveEnabled = false
@@ -202,15 +219,15 @@ class AuthEntryView(private val activity: AppCompatActivity, private val vm: Aut
             }
             fields[key] = edit
             controls.add(edit)
-            panel.addView(edit, LinearLayout.LayoutParams(-1, px(77f)).apply { setMargins(px(29f), 0, px(29f), 0) })
+            panel.addView(edit, LinearLayout.LayoutParams(-1, px(58f)).apply { setMargins(px(24f), 0, px(24f), 0) })
         }
         input("email", "Email", false)
-        space(28f)
+        space(16f)
         input("password", "Senha", true)
         if (register) {
-            space(27f)
+            space(16f)
             input("confirmation", "Confirmar senha", true)
-            space(17f)
+            space(12f)
             val row = LinearLayout(context).apply { gravity = Gravity.CENTER_VERTICAL }
             consent = CheckBox(context).apply {
                 buttonTintList = ColorStateList.valueOf(Color.BLACK)
@@ -219,7 +236,7 @@ class AuthEntryView(private val activity: AppCompatActivity, private val vm: Aut
             controls.add(consent!!)
             row.addView(consent, LinearLayout.LayoutParams(px(48f), px(48f)))
             val terms = "Concordo com os termos de serviço"
-            row.addView(label(terms, 16f).apply {
+            row.addView(label(terms, 14f).apply {
                 gravity = Gravity.START or Gravity.CENTER_VERTICAL
                 text = SpannableString(terms).apply {
                     val start = terms.indexOf("termos")
@@ -234,16 +251,16 @@ class AuthEntryView(private val activity: AppCompatActivity, private val vm: Aut
                 }
             }, LinearLayout.LayoutParams(0, -1, 1f))
             panel.addView(row, LinearLayout.LayoutParams(-1, px(48f)).apply { setMargins(px(24f), 0, px(24f), 0) })
-            space(26f)
+            space(20f)
         } else {
             space(3f)
-            val recovery = label("Esqueci minha senha", 20f, green, 600).apply {
+            val recovery = label("Esqueci minha senha", 15f, green, 600).apply {
                 paintFlags = paintFlags or Paint.UNDERLINE_TEXT_FLAG
                 setOnClickListener { vm.navigate(AuthScreen.RECOVERY) }
             }
             controls.add(recovery)
             panel.addView(recovery, LinearLayout.LayoutParams(-1, px(48f)))
-            space(40f)
+            space(20f)
         }
         feedback = label("", 14f, Color.rgb(155, 28, 28)).apply {
             accessibilityLiveRegion = ACCESSIBILITY_LIVE_REGION_POLITE
@@ -252,10 +269,10 @@ class AuthEntryView(private val activity: AppCompatActivity, private val vm: Aut
         panel.addView(feedback, LinearLayout.LayoutParams(-1, -2).apply { setMargins(px(29f), 0, px(29f), px(8f)) })
         spinner = ProgressBar(context).apply { visibility = GONE; indeterminateTintList = ColorStateList.valueOf(green) }
         panel.addView(spinner, LinearLayout.LayoutParams(px(32f), px(32f)).apply { gravity = Gravity.CENTER_HORIZONTAL })
-        val next = action("Continuar", Color.rgb(231, 175, 43), Color.rgb(55, 22, 22)) { submit() }
+        val next = action("Continuar", Color.rgb(231, 175, 43), Color.rgb(55, 22, 22), radius = 16f) { submit() }
         controls.add(next)
-        panel.addView(next, LinearLayout.LayoutParams(-1, px(75f)).apply { setMargins(px(50f), 0, px(49f), 0) })
-        space(37f)
+        panel.addView(next, LinearLayout.LayoutParams(-1, px(56f)).apply { setMargins(px(24f), 0, px(24f), 0) })
+        space(28f)
         val scroll = androidx.core.widget.NestedScrollView(context).apply {
             isFillViewport = false
             isSaveEnabled = false

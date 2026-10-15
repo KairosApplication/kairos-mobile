@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <color name="home_surface">#FFFFFF</color>
+    <color name="home_heading">#CC0F2B21</color>
+    <color name="home_background_top">#E5EFEC</color>
+    <color name="home_background_middle">#F4EFEF</color>
+    <color name="home_background_bottom">#DEDEDE</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
     <color name="kairos_splash_background">#008563</color>

@@ -26,6 +26,7 @@ import com.example.kairos.model.auth.UserProfile
 import com.example.kairos.model.home.DemoStockerHomeRepository
 import com.example.kairos.model.home.StockerHomeRepository
 import com.example.kairos.view.AccountTestActivity
+import com.example.kairos.view.MainActivity
 import com.example.kairos.view.StockerHomeView
 import com.example.kairos.viewmodel.StockerHomeUiState
 import com.example.kairos.viewmodel.StockerHomeViewModel
@@ -136,6 +137,15 @@ class StockerHomeTest {
                 val results = home.findViewById<View>(R.id.history_results)
                 assertEquals(2, texts(results).count { it.text.toString() == "Água Mineral" })
                 assertFalse(texts(results).any { it.text.toString().contains("Coca") })
+                home.findViewById<View>(R.id.history_filter).performClick()
+            }
+            captureDialog("history-filters")
+            onView(withId(R.id.history_period)).perform(click())
+            onData(equalTo("Ontem")).inRoot(isPlatformPopup()).perform(click())
+            onView(withId(R.id.history_cancel_action)).perform(click())
+            scenario.onActivity {
+                assertEquals("ALL", home.save().getString("historyPeriod"))
+                assertEquals("agua", home.findViewById<EditText>(R.id.history_search).text.toString())
                 home.findViewById<View>(R.id.history_filter).performClick()
             }
             onView(withId(R.id.history_period)).perform(click())

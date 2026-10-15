@@ -30,6 +30,12 @@
     <string name="account_cancel">Cancelar</string>
     <string name="account_email_instructions">Confirme sua senha atual. O novo e-mail será usado após a confirmação do link recebido.</string>
     <string name="account_saving">Atualizando sua conta…</string>
+    <string name="account_name_instructions">Atualize seu nome e sobrenome como devem aparecer na sua conta.</string>
+    <string name="account_password_instructions">Confirme sua senha atual e escolha uma nova senha com pelo menos 6 caracteres.</string>
+    <string name="account_update_failed">Não foi possível salvar. Confira os dados e tente novamente.</string>
+    <color name="account_error">#B3261E</color>
+    <item name="account_form_save" type="id" />
+    <item name="onboarding_scroll" type="id" />
     <string name="account_actions_unavailable">Não foi possível iniciar a edição. Tente novamente.</string>
     <item name="account_profile_edit" type="id" />
     <item name="account_profile_summary" type="id" />

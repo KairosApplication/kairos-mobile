@@ -27,7 +27,7 @@ class FirebaseAuthGateway(private val auth: FirebaseAuth) : AuthGateway {
         return AuthIdentity(user.uid, user.email ?: error("Email ausente."))
     }
 
-    private fun <T> translate(action: () -> T): T = try {
+    private fun <T> translate(reauthentication: Boolean = false, action: () -> T): T = try {
         action()
     } catch (e: FirebaseTooManyRequestsException) {
         throw IllegalArgumentException("Muitas tentativas. Aguarde antes de tentar novamente.")
@@ -38,7 +38,9 @@ class FirebaseAuthGateway(private val auth: FirebaseAuth) : AuthGateway {
             "ERROR_WEAK_PASSWORD" -> "A senha não atende à política do projeto Firebase."
             "ERROR_EMAIL_ALREADY_IN_USE" -> "Este e-mail não está disponível. Tente outro endereço."
             "ERROR_INVALID_EMAIL" -> "Informe um email válido."
-            "ERROR_WRONG_PASSWORD", "ERROR_INVALID_CREDENTIAL", "ERROR_INVALID_LOGIN_CREDENTIALS" -> "Confira o e-mail e a senha informados."
+            "ERROR_WRONG_PASSWORD", "ERROR_INVALID_CREDENTIAL", "ERROR_INVALID_LOGIN_CREDENTIALS" ->
+                if (reauthentication) "Senha atual incorreta. Confira a senha e tente novamente."
+                else "Confira o e-mail e a senha informados."
             "ERROR_REQUIRES_RECENT_LOGIN" -> "Faça login novamente para confirmar essa alteração."
             "ERROR_USER_TOKEN_EXPIRED", "ERROR_INVALID_USER_TOKEN", "ERROR_USER_DISABLED" -> throw AccountChangedException()
             "ERROR_OPERATION_NOT_ALLOWED" -> "Habilite Email/Senha no Firebase Authentication."
@@ -85,18 +87,22 @@ class FirebaseAuthGateway(private val auth: FirebaseAuth) : AuthGateway {
 
     private fun account(uid: String) = auth.currentUser?.takeIf { it.uid == uid } ?: throw AccountChangedException()
 
-    override fun requestEmailChange(uid: String, email: String, password: String) = translate {
+    private fun reauthenticate(uid: String, password: String) = translate(reauthentication = true) {
         val user = account(uid)
         user.reauthenticate(EmailAuthProvider.getCredential(user.email ?: error("E-mail ausente."), password)).resultInWorker()
         account(uid)
+    }
+
+    override fun requestEmailChange(uid: String, email: String, password: String) = translate {
+        val user = account(uid)
+        reauthenticate(uid, password)
         user.verifyBeforeUpdateEmail(email).resultInWorker()
         Unit
     }
 
     override fun changePassword(uid: String, currentPassword: String, newPassword: String) = translate {
         val user = account(uid)
-        user.reauthenticate(EmailAuthProvider.getCredential(user.email ?: error("E-mail ausente."), currentPassword)).resultInWorker()
-        account(uid)
+        reauthenticate(uid, currentPassword)
         user.updatePassword(newPassword).resultInWorker()
         Unit
     }

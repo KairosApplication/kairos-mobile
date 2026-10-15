@@ -44,10 +44,11 @@ class AccountScreensTest {
             scenario.onActivity { activity ->
                 home = StockerHomeView(activity, {}, { logout = true }, onAccountEdit = { request ->
                     requests.add(request)
+                    home.updateSession(account, true, "", request.operation)
                     if (request is AccountEditRequest.Name) {
                         account = account.copy(profile = account.profile!!.copy(name = request.name, lastName = request.lastName))
-                        home.updateSession(account, false, "Nome atualizado com sucesso.")
                     }
+                    home.updateSession(account, false, "Alteração confirmada.", succeeded = true)
                 })
                 home.updateSession(account, false, "")
                 home.bind(StockerHomeUiState(data = DemoStockerHomeRepository().load(account.uid)))

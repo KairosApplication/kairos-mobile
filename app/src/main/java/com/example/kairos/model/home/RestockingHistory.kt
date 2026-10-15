@@ -14,7 +14,8 @@ data class RestockingRecord(
     val imageKey: String,
     val shelfCode: String,
     val occurredAt: Instant,
-    val status: RestockingStatus
+    val status: RestockingStatus,
+    val analysisId: String? = null
 )
 
 enum class HistoryPeriod { ALL, TODAY, YESTERDAY, LAST_SEVEN_DAYS }

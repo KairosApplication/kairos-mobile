@@ -59,6 +59,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
+        com.example.kairos.model.home.StockerPreferences.restoreTheme(this)
         super.onCreate(savedInstanceState)
         splashCompleted = savedInstanceState?.getBoolean("splashCompleted", false) ?: false
         onboardingCompleted = savedInstanceState?.getBoolean("onboardingCompleted", false) ?: false
@@ -86,7 +87,6 @@ class MainActivity : AppCompatActivity() {
         loadingView = LoadingView(this).apply { visibility = View.GONE }
         root.addView(loadingView, FrameLayout.LayoutParams(-1, -1))
         setContentView(root)
-        showOnboarding(root)
         showSplash(root)
         ViewCompat.setOnApplyWindowInsetsListener(scroll) { view, insets ->
             val safe = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.ime())
@@ -102,10 +102,20 @@ class MainActivity : AppCompatActivity() {
         homeView.restore(savedInstanceState?.getBundle("home"))
         homeVm.state.observe(this) { homeView.bind(it) }
         vm.state.observe(this) { state ->
+            if (state.user != null) {
+                // A sessão restaurada nunca deve ficar atrás do onboarding.
+                onboardingRoot?.let(root::removeView)
+                onboardingRoot = null
+                onboardingPage = 0
+                onboardingCompleted = false
+            } else if (state.canStartOnboarding) {
+                showOnboarding(root)
+            }
             if (renderedScreen != state.screen) render(state)
             authEntry.update(state)
             if (state.screen == AuthScreen.HOME) {
-                homeView.updateSession(state.user, state.loading, state.message, state.accountOperation)
+                state.user?.let { com.example.kairos.model.home.StockerPreferences(this, it.uid).applyTheme(this) }
+                homeView.updateSession(state.user, state.loading, state.message, state.accountOperation, state.accountOperationSucceeded)
                 state.user?.let { homeVm.load(it.uid) }
             }
             if (formScroll.visibility == View.VISIBLE) {
@@ -150,15 +160,21 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showOnboarding(root: FrameLayout) {
-        if (onboardingCompleted || vm.state.value?.screen != AuthScreen.LOGIN) return
+        if (onboardingCompleted || onboardingRoot != null || vm.state.value?.canStartOnboarding != true) return
         val onboarding = layoutInflater.inflate(R.layout.view_onboarding, root, false)
         onboardingRoot = onboarding
-        root.addView(onboarding, FrameLayout.LayoutParams(-1, -1))
+        window.isNavigationBarContrastEnforced = false
+        WindowCompat.getInsetsController(window, root).isAppearanceLightNavigationBars = false
+        // Uma restauração rápida pode terminar enquanto a splash ainda está visível.
+        val splashIndex = splashView?.let(root::indexOfChild)?.takeIf { it >= 0 } ?: root.childCount
+        root.addView(onboarding, splashIndex, FrameLayout.LayoutParams(-1, -1))
         ViewCompat.setOnApplyWindowInsetsListener(onboarding) { view, insets ->
-            val safe = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val safe = insets.getInsetsIgnoringVisibility(WindowInsetsCompat.Type.systemBars())
             view.setPadding(safe.left, safe.top, safe.right, safe.bottom)
             insets
         }
+        OnboardingStyle.apply(onboarding)
+        ViewCompat.requestApplyInsets(onboarding)
         onboarding.findViewById<Button>(R.id.onboarding_next).setOnClickListener {
             if (onboardingPage < onboardingPages.lastIndex) {
                 onboardingPage++
@@ -167,6 +183,7 @@ class MainActivity : AppCompatActivity() {
                 onboardingCompleted = true
                 root.removeView(onboarding)
                 onboardingRoot = null
+                window.isNavigationBarContrastEnforced = true
             }
         }
         renderOnboarding()
@@ -300,7 +317,7 @@ class MainActivity : AppCompatActivity() {
             authEntry.close()
             fields.clear()
             controls.clear()
-            homeView.updateSession(state.user, state.loading, state.message, state.accountOperation)
+            homeView.updateSession(state.user, state.loading, state.message, state.accountOperation, state.accountOperationSucceeded)
             state.user?.let { homeVm.load(it.uid) }
             return
         }

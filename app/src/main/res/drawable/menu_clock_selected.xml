@@ -1,11 +1,6 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- O frame do Figma sobrepõe dois retângulos brancos ao SVG preenchido. -->
-<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="@drawable/menu_clock_active" />
-    <item android:width="2dp" android:height="9dp" android:gravity="center" android:top="-7dp">
-        <shape><solid android:color="#FFFFFF" /><corners android:radius="100dp" /></shape>
-    </item>
-    <item android:width="9dp" android:height="2dp" android:gravity="center" android:left="7dp">
-        <shape><solid android:color="#FFFFFF" /><corners android:radius="100dp" /></shape>
-    </item>
-</layer-list>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="32dp" android:height="32dp" android:viewportWidth="32" android:viewportHeight="32">
+    <!-- Compound path: transparent hands remain readable in both themes. -->
+    <path android:fillColor="@color/home_active" android:fillType="evenOdd"
+        android:pathData="M16,3C8.82,3 3,8.82 3,16C3,23.18 8.82,29 16,29C23.18,29 29,23.18 29,16C29,8.82 23.18,3 16,3Z M15,9C15,8.45 15.45,8 16,8C16.55,8 17,8.45 17,9L17,15L22.5,15C23.05,15 23.5,15.45 23.5,16C23.5,16.55 23.05,17 22.5,17L16,17C15.45,17 15,16.55 15,16Z" />
+</vector>

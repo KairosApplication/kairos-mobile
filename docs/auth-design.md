@@ -18,9 +18,34 @@ Both popup backgrounds are native white `GradientDrawable` shapes with 36-unit
 top corner radii and square bottom corners. Their centered 111 × 5 green handles
 are native rounded shapes too. These elements do not use raster images.
 
-Inter is bundled locally with its OFL license in `docs/licenses`. Other interface text uses the Android default font.
+The entry, login and registration text use the bundled Montserrat variable font,
+with explicit weights for headings, fields and actions. Onboarding, loading and
+the account-completion/recovery theme use the same family. Inter remains bundled
+for compatibility with existing assets; its license is retained in `docs/licenses`.
 The panel contents scroll when the keyboard or available screen height requires it.
 Passwords are deliberately excluded from saved instance state.
+
+The onboarding waits for session restoration: it is only eligible for an idle,
+unauthenticated login/registration flow. Restored users go directly to Home or
+profile completion. Completing the onboarding is retained during activity
+recreation; returning from an authenticated session to login starts a new entry
+flow. If restoration finishes during the splash, onboarding is inserted below it.
+`OnboardingStyle` applies Montserrat weights after inflation (titles/actions 700,
+body/counter 600), preventing the AppCompat theme from selecting the font's Thin
+default. Onboarding uses a scrollable, centered content column and a separate
+bottom action; text and button share the same width on common phone sizes.
+The system-bar insets are reserved even during the splash, explicitly requested
+after attachment, and the button can grow with accessibility font scaling.
+`OnboardingLayoutTest` covers all three titles at 320×568, 360×640 and 412×915dp,
+with normal and enlarged text. `AuthUiPreviewTest` renders an isolated preview.
+
+The entry buttons use 58-unit heights and 20sp semibold text. Login/registration
+use compact 58-unit fields (16sp), 16-unit gaps and a 56-unit primary action
+(18sp), with green focus borders and flat ripple buttons without native elevation.
+These dimensions scale down on narrow phones, are capped at the reference width
+on larger screens, and keep the existing keyboard-aware scrolling and validation.
+The latest refinements use the previously retrieved reference and user feedback;
+a fresh Figma comparison is pending because the connector's Starter quota is exhausted.
 
 Registration creates the Firebase identity first and then opens the existing
 profile-completion screen for name, surname, birth date, CPF, ZIP code and plan.

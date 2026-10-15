@@ -24,7 +24,7 @@ class ProfileView(
         val name = AccountValidation.fullName(user).ifBlank { s.text(R.string.account_not_informed) }
         val hero = FrameLayout(context).apply {
             background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(0xFF0A6A4F.toInt(), 0xFF1B4D3E.toInt())).apply {
+                intArrayOf(context.getColor(R.color.home_header_edge), context.getColor(R.color.home_header_bottom))).apply {
                 val radius = s.px(24f).toFloat()
                 cornerRadii = floatArrayOf(0f, 0f, 0f, 0f, radius, radius, radius, radius)
             }
@@ -65,7 +65,7 @@ class ProfileView(
             addView(s.label(s.text(title), 17f, s.secondary, 500))
             addView(LinearLayout(context).apply {
                 gravity = Gravity.CENTER_VERTICAL
-                addView(s.label(value?.toString() ?: s.text(R.string.account_unavailable_count), 40f, context.getColor(R.color.home_green)))
+                addView(s.label(value?.toString() ?: s.text(R.string.account_unavailable_count), 40f, s.ink))
                 addView(s.label(s.text(R.string.home_week), 15f, s.secondary, 500),
                     LayoutParams(-2, -2).apply { marginStart = s.px(14f) })
             })
@@ -82,7 +82,7 @@ class ProfileView(
             details.addView(LinearLayout(context).apply {
                 orientation = VERTICAL
                 addView(s.label(s.text(label), 17f))
-                addView(s.label(value, 16f, 0xFF777777.toInt(), 400), LayoutParams(-1, -2).apply { topMargin = s.px(4f) })
+                addView(s.label(value, 16f, s.secondary, 400), LayoutParams(-1, -2).apply { topMargin = s.px(4f) })
             }, LayoutParams(-1, -2).apply { topMargin = s.px(top) })
         }
         field(R.string.account_name_label, name, 0f)

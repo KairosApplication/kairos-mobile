@@ -20,7 +20,7 @@ class SecurityView(context: Context, scale: Float, user: SignedInUser?, busy: Bo
         orientation = VERTICAL
         id = R.id.account_security_data
         fun heading(title: Int, top: Float) {
-            addView(s.label(s.text(title), 22f, 0xCC0F2B21.toInt()).apply {
+            addView(s.label(s.text(title), 22f, context.getColor(R.color.home_heading)).apply {
                 ViewCompat.setAccessibilityHeading(this, true)
             }, LayoutParams(-1, -2).apply { setMargins(s.px(31f), s.px(top), s.px(21f), 0) })
         }
@@ -36,12 +36,12 @@ class SecurityView(context: Context, scale: Float, user: SignedInUser?, busy: Bo
                 isEnabled = !busy || field == null
             }
             row.addView(FrameLayout(context).apply {
-                background = s.rounded(0x66B3D5C3, 50f)
+                background = s.rounded(context.getColor(R.color.home_subtle_tile), 50f)
                 addView(s.icon(icon), FrameLayout.LayoutParams(s.px(iconSize), s.px(iconSize), Gravity.CENTER))
             }, LayoutParams(s.px(48f), s.px(48f)))
             row.addView(LinearLayout(context).apply {
                 orientation = VERTICAL
-                addView(s.label(s.text(title), 17f, 0xCC0F2B21.toInt(), 500))
+                addView(s.label(s.text(title), 17f, context.getColor(R.color.home_heading), 500))
                 addView(s.label(value, 16f), LayoutParams(-1, -2).apply { topMargin = s.px(2f) })
             }, LayoutParams(0, -2, 1f).apply { marginStart = s.px(17f) })
             if (field != null) row.addView(androidx.appcompat.widget.AppCompatImageButton(context).apply {

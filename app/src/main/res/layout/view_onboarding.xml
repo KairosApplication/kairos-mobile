@@ -2,132 +2,67 @@
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/onboarding_root"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="@drawable/splash_background"
-    android:clickable="true"
-    android:focusable="true">
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:background="@drawable/splash_background" android:clickable="true" android:focusable="true">
 
-    <ImageView
-        android:id="@+id/onboarding_logo"
-        android:layout_width="120dp"
-        android:layout_height="124dp"
-        android:layout_marginTop="24dp"
-        android:contentDescription="@string/app_name"
-        android:scaleType="fitCenter"
-        android:src="@drawable/ic_kairos_logo"
-        app:layout_constraintBottom_toTopOf="@id/onboarding_illustration"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
+    <androidx.core.widget.NestedScrollView
+        android:id="@+id/onboarding_scroll"
+        android:layout_width="0dp" android:layout_height="0dp"
+        android:fillViewport="true" android:scrollbars="none"
         app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintVertical_chainStyle="spread_inside" />
-
-    <ImageView
-        android:id="@+id/onboarding_illustration"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:contentDescription="@string/onboarding_illustration_description"
-        android:scaleType="fitCenter"
-        app:layout_constraintBottom_toTopOf="@id/onboarding_title"
-        app:layout_constraintDimensionRatio="1:1"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintHeight_max="340dp"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/onboarding_logo"
-        app:layout_constraintWidth_max="340dp" />
-
-    <TextView
-        android:id="@+id/onboarding_title"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:fontFamily="sans-serif"
-        android:gravity="start"
-        android:textColor="@color/white"
-        android:textSize="28sp"
-        android:textStyle="bold"
-        app:layout_constraintBottom_toTopOf="@id/onboarding_description"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/onboarding_illustration"
-        app:layout_constraintWidth_max="280dp" />
-
-    <TextView
-        android:id="@+id/onboarding_description"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:fontFamily="sans-serif"
-        android:gravity="start"
-        android:lineSpacingExtra="1dp"
-        android:textColor="@color/white"
-        android:textSize="16sp"
-        app:layout_constraintBottom_toTopOf="@id/onboarding_indicators"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/onboarding_title"
-        app:layout_constraintWidth_max="280dp" />
-
-    <LinearLayout
-        android:id="@+id/onboarding_indicators"
-        android:layout_width="wrap_content"
-        android:layout_height="14dp"
-        android:gravity="center"
-        android:orientation="horizontal"
-        app:layout_constraintBottom_toTopOf="@id/onboarding_counter"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/onboarding_description">
-
-        <View
-            android:id="@+id/onboarding_dot_1"
-            android:layout_width="14dp"
-            android:layout_height="14dp"
-            android:background="@drawable/onboarding_dot_active" />
-
-        <View
-            android:id="@+id/onboarding_dot_2"
-            android:layout_width="14dp"
-            android:layout_height="14dp"
-            android:layout_marginStart="10dp"
-            android:background="@drawable/onboarding_dot_inactive" />
-
-        <View
-            android:id="@+id/onboarding_dot_3"
-            android:layout_width="14dp"
-            android:layout_height="14dp"
-            android:layout_marginStart="10dp"
-            android:background="@drawable/onboarding_dot_inactive" />
-    </LinearLayout>
-
-    <TextView
-        android:id="@+id/onboarding_counter"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:fontFamily="sans-serif"
-        android:textColor="@color/white"
-        android:textSize="13sp"
         app:layout_constraintBottom_toTopOf="@id/onboarding_next"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/onboarding_indicators" />
+        app:layout_constraintStart_toStartOf="parent" app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintWidth_max="348dp">
+        <LinearLayout
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="vertical" android:gravity="center_horizontal"
+            android:paddingHorizontal="24dp" android:paddingTop="16dp" android:paddingBottom="20dp">
+            <ImageView android:id="@+id/onboarding_logo"
+                android:layout_width="92dp" android:layout_height="96dp"
+                android:contentDescription="@string/app_name"
+                android:scaleType="fitCenter" android:src="@drawable/ic_kairos_logo" />
+            <Space android:layout_width="1dp" android:layout_height="0dp" android:layout_weight="1" />
+            <ImageView android:id="@+id/onboarding_illustration"
+                android:layout_width="match_parent" android:layout_height="260dp"
+                android:layout_marginTop="16dp" android:layout_marginBottom="24dp"
+                android:contentDescription="@string/onboarding_illustration_description"
+                android:scaleType="fitCenter" />
+            <TextView android:id="@+id/onboarding_title"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:fontFamily="@font/montserrat_semibold" app:fontFamily="@font/montserrat_semibold"
+                android:gravity="start" android:includeFontPadding="false"
+                android:textColor="@color/white" android:textSize="26sp" />
+            <TextView android:id="@+id/onboarding_description"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:fontFamily="@font/montserrat_semibold" app:fontFamily="@font/montserrat_semibold"
+                android:gravity="start" android:includeFontPadding="false" android:lineSpacingExtra="3dp"
+                android:textColor="@color/white" android:textSize="16sp" />
+            <Space android:layout_width="1dp" android:layout_height="0dp" android:layout_weight="1" />
+            <LinearLayout android:id="@+id/onboarding_indicators"
+                android:layout_width="wrap_content" android:layout_height="12dp"
+                android:layout_marginTop="24dp" android:gravity="center" android:orientation="horizontal">
+                <View android:id="@+id/onboarding_dot_1" android:layout_width="12dp" android:layout_height="12dp" android:background="@drawable/onboarding_dot_active" />
+                <View android:id="@+id/onboarding_dot_2" android:layout_width="12dp" android:layout_height="12dp" android:layout_marginStart="10dp" android:background="@drawable/onboarding_dot_inactive" />
+                <View android:id="@+id/onboarding_dot_3" android:layout_width="12dp" android:layout_height="12dp" android:layout_marginStart="10dp" android:background="@drawable/onboarding_dot_inactive" />
+            </LinearLayout>
+            <TextView android:id="@+id/onboarding_counter"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:fontFamily="@font/montserrat_semibold" app:fontFamily="@font/montserrat_semibold"
+                android:includeFontPadding="false" android:textColor="@color/white" android:textSize="13sp" />
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
 
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/onboarding_next"
-        android:layout_width="0dp"
-        android:layout_height="54dp"
-        android:layout_marginBottom="24dp"
-        android:fontFamily="sans-serif"
-        android:insetTop="0dp"
-        android:insetBottom="0dp"
-        android:textAllCaps="false"
-        android:textColor="@color/black"
-        android:textSize="19sp"
-        android:textStyle="bold"
-        app:backgroundTint="@color/white"
-        app:cornerRadius="28dp"
+    <com.google.android.material.button.MaterialButton android:id="@+id/onboarding_next"
+        android:layout_width="0dp" android:layout_height="wrap_content" android:minHeight="54dp"
+        android:layout_marginHorizontal="24dp" android:layout_marginBottom="16dp"
+        android:fontFamily="@font/montserrat_semibold" app:fontFamily="@font/montserrat_semibold"
+        android:includeFontPadding="false" android:insetTop="0dp" android:insetBottom="0dp"
+        android:paddingVertical="14dp" android:elevation="0dp" android:stateListAnimator="@null"
+        android:textAllCaps="false" android:textColor="@color/black" android:textSize="18sp"
+        app:backgroundTint="@color/white" app:cornerRadius="28dp"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/onboarding_counter"
+        app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintWidth_max="300dp" />
-
 </androidx.constraintlayout.widget.ConstraintLayout>

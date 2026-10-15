@@ -1,0 +1,17 @@
+<resources>
+    <string name="analysis_result_title">Resultado da análise</string>
+    <string name="analysis_shelf">Gôndola %1$s</string>
+    <string name="analysis_location">Corredor %1$s - Setor %2$s</string>
+    <string name="analysis_product_count">%1$d produtos analisados</string>
+    <string name="analysis_products">Produtos para reposição</string>
+    <string name="analysis_review_products">Produtos identificados</string>
+    <string name="analysis_start">Iniciar reposição</string>
+    <string name="analysis_select_product">Selecionar %1$s</string>
+    <string name="analysis_demo_open">Ver demonstração</string>
+    <string name="analysis_demo_only">Esta análise é uma demonstração. Os produtos selecionados não serão alterados no estoque. O início e a confirmação da reposição dependem da integração com o mercado.</string>
+    <plurals name="analysis_missing">
+        <item quantity="one">%d produto está em falta</item>
+        <item quantity="other">%d produtos estão em falta</item>
+    </plurals>
+    <item name="analysis_start" type="id" />
+</resources>
