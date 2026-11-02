@@ -23,7 +23,9 @@ object ApiOrigin {
     }
 }
 
-class ApiFailure(val status: Int) : Exception(when (status) {
+class ApiFailure(val status: Int, code: String? = null) : Exception(if (code == "AI_NOT_CONFIGURED")
+    "As respostas de IA ainda não estão ativadas. Você já pode criar e consultar suas conversas."
+    else when (status) {
     401 -> "Sessão expirada ou revogada. Entre novamente."
     403 -> "Sua conta não tem autorização para esta operação."
     404 -> "O recurso não está disponível para sua conta."
@@ -31,7 +33,8 @@ class ApiFailure(val status: Int) : Exception(when (status) {
     413 -> "A imagem excede o limite permitido."
     422, 400 -> "Confira os dados e as quantidades informadas."
     429 -> "Limite de solicitações atingido. Aguarde e tente novamente."
-    else -> "Serviço indisponível. Verifique a conexão e tente novamente."
+    502, 503, 504 -> "Não conseguimos acessar o servidor agora. Tente novamente em instantes."
+    else -> "Não foi possível concluir a solicitação no servidor. Tente novamente."
 })
 
 interface IdentityTokenSource {
@@ -73,7 +76,16 @@ class KairosApi(private val base: String, private val tokens: IdentityTokenSourc
             }
             val status = connection.responseCode
             owner()
-            if (status !in 200..299) throw ApiFailure(status)
+            if (status !in 200..299) {
+                val code = if (status == 503) runCatching {
+                    connection.errorStream?.use { stream ->
+                        val bytes = ByteArray(2048)
+                        val count = stream.read(bytes)
+                        if (count > 0) JSONObject(String(bytes, 0, count, Charsets.UTF_8)).optString("code") else null
+                    }
+                }.getOrNull() else null
+                throw ApiFailure(status, code)
+            }
             val body = connection.inputStream.use { stream ->
                 val bytes = java.io.ByteArrayOutputStream()
                 val buffer = ByteArray(8192)

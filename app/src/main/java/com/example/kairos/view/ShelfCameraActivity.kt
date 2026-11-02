@@ -41,9 +41,8 @@ class ShelfCameraActivity : AppCompatActivity() {
         window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(8), dp(16), dp(8), dp(24)); fitsSystemWindows = true
-            background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(getColor(R.color.home_header_top), getColor(R.color.home_header_middle), getColor(R.color.home_header_top)))
+            setPadding(dp(16), dp(12), dp(16), dp(16)); fitsSystemWindows = true
+            setBackgroundColor(0xFF102B23.toInt())
         }
         val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         header.addView(ImageButton(this).apply {
@@ -58,14 +57,32 @@ class ShelfCameraActivity : AppCompatActivity() {
         root.addView(header)
         feedback = TextView(this).apply {
             text = "Enquadre a gôndola inteira e toque no botão para fotografar."
-            textSize = 16f; setTextColor(0xBFFFFFFF.toInt()); gravity = Gravity.CENTER
+            textSize = 14f; setTextColor(0xDFFFFFFF.toInt()); gravity = Gravity.CENTER
             typeface = ResourcesCompat.getFont(this@ShelfCameraActivity, R.font.montserrat_regular)
             setPadding(dp(24), dp(8), dp(24), dp(20))
             accessibilityLiveRegion = android.view.View.ACCESSIBILITY_LIVE_REGION_POLITE
         }
         root.addView(feedback)
         preview = PreviewView(this)
-        root.addView(preview, LinearLayout.LayoutParams(-1, 0, 1f))
+        root.addView(FrameLayout(this).apply {
+            background = GradientDrawable().apply { setColor(Color.BLACK); cornerRadius = dp(24).toFloat() }
+            clipToOutline = true
+            addView(preview, FrameLayout.LayoutParams(-1, -1))
+            addView(object : android.view.View(this@ShelfCameraActivity) {
+                private val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                    color = 0xFFE1FFEF.toInt(); style = android.graphics.Paint.Style.STROKE; strokeWidth = dp(3).toFloat()
+                    strokeCap = android.graphics.Paint.Cap.ROUND
+                }
+                override fun onDraw(canvas: android.graphics.Canvas) {
+                    val edge = dp(26).toFloat(); val length = dp(32).toFloat()
+                    for (right in listOf(false, true)) for (bottom in listOf(false, true)) {
+                        val x = if (right) width - edge else edge; val y = if (bottom) height - edge else edge
+                        canvas.drawLine(x, y, x + if (right) -length else length, y, paint)
+                        canvas.drawLine(x, y, x, y + if (bottom) -length else length, paint)
+                    }
+                }
+            }, FrameLayout.LayoutParams(-1, -1))
+        }, LinearLayout.LayoutParams(-1, 0, 1f))
         val controls = FrameLayout(this)
         controls.addView(ImageButton(this).apply {
             setImageResource(R.drawable.scanner_flip); background = null; contentDescription = "Alternar câmera"
@@ -76,7 +93,12 @@ class ShelfCameraActivity : AppCompatActivity() {
             isEnabled = false; setOnClickListener { photograph() }
         }
         controls.addView(shutter, FrameLayout.LayoutParams(dp(105), dp(105), Gravity.CENTER))
-        root.addView(controls, LinearLayout.LayoutParams(-1, dp(180)))
+        root.addView(controls, LinearLayout.LayoutParams(-1, dp(136)))
+        root.addView(TextView(this).apply {
+            text = "Boa iluminação • Câmera firme • Gôndola inteira"; textSize = 11f
+            gravity = Gravity.CENTER; setTextColor(0xBFFFFFFF.toInt())
+            typeface = ResourcesCompat.getFont(this@ShelfCameraActivity, R.font.montserrat_regular)
+        })
         setContentView(root)
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) bindCamera()
         else permission.launch(Manifest.permission.CAMERA)

@@ -21,10 +21,16 @@ class HttpChatRepository(private val api: KairosApi = ApiDependencies.chat()) : 
     private fun sources(row: JSONObject): List<String> = row.optJSONArray("sources")?.let { values ->
         (0 until values.length()).map { values.getString(it) }.filter { it in setOf("pdf", "database", "memory") }
     }.orEmpty()
+    private fun conversationLabel(row: JSONObject): String = runCatching {
+        val instant = java.time.Instant.parse(row.optString("updatedAt", row.optString("createdAt")))
+        val date = java.time.format.DateTimeFormatter.ofPattern("dd MMM · HH:mm", java.util.Locale.forLanguageTag("pt-BR"))
+            .withZone(java.time.ZoneId.of("America/Sao_Paulo")).format(instant)
+        "Conversa de $date"
+    }.getOrDefault("Conversa salva")
     override fun conversations(uid: String, page: Int): ConversationPage {
         val data = JSONObject(api.request(uid, "/api/v1/me/chat/conversations?page=$page&size=20"))
         return ConversationPage(data.getJSONArray("items").objects().map {
-            Conversation(valid(it.getString("id")), it.optString("updatedAt", it.getString("id")))
+            Conversation(valid(it.getString("id")), conversationLabel(it))
         }, data.getBoolean("hasNext"))
     }
     override fun create(uid: String) = valid(JSONObject(api.request(uid, "/api/v1/me/chat/conversations", "POST", JSONObject())).getString("id"))

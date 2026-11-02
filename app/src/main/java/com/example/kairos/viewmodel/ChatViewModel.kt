@@ -9,7 +9,8 @@ import android.os.Looper
 
 data class ChatState(val loading: Boolean = false, val conversationId: String? = null,
                      val messages: List<ChatMessage> = emptyList(), val conversations: List<Conversation> = emptyList(),
-                     val page: Int = 0, val hasNext: Boolean = false, val error: String = "", val draft: String = "")
+                     val page: Int = 0, val hasNext: Boolean = false, val error: String = "", val draft: String = "",
+                     val browsing: Boolean = false)
 
 class ChatViewModel(private val repository: ChatRepository = HttpChatRepository()) : ViewModel() {
     private val state = MutableLiveData(ChatState())
@@ -46,10 +47,10 @@ class ChatViewModel(private val repository: ChatRepository = HttpChatRepository(
         val page = if (next) before.page + 1 else 0
         val result = repository.conversations(owner, page)
         before.copy(conversations = if (next) (before.conversations + result.items).distinctBy { it.id } else result.items,
-            page = page, hasNext = result.hasNext, error = "")
+            page = page, hasNext = result.hasNext, error = "", browsing = true)
     }
-    fun create() = run { owner, before -> before.copy(conversationId = repository.create(owner), messages = emptyList(), error = "") }
-    fun open(id: String) = run { owner, before -> before.copy(conversationId = id, messages = repository.messages(owner, id), error = "") }
+    fun create() = run { owner, before -> before.copy(conversationId = repository.create(owner), messages = emptyList(), conversations = emptyList(), hasNext = false, browsing = false, error = "") }
+    fun open(id: String) = run { owner, before -> before.copy(conversationId = id, messages = repository.messages(owner, id), conversations = emptyList(), hasNext = false, browsing = false, error = "") }
     fun send() = run { owner, before ->
         val question = before.draft.trim()
         require(question.isNotBlank() && question.length <= 10000)

@@ -20,6 +20,7 @@ import java.util.UUID
 
 /** Catalog, review and explicit stock confirmation around the lifecycle-bound CameraX capture. */
 class ScannerActivity : AppCompatActivity() {
+    private val ui by lazy { UiKit(this) }
     private lateinit var vm: ScannerViewModel
     private lateinit var body: LinearLayout
     private var pendingPhoto: File? = null
@@ -65,7 +66,7 @@ class ScannerActivity : AppCompatActivity() {
         }
         body = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(24, 48, 24, 24)
+            setPadding(ui.dp(20), ui.dp(20), ui.dp(20), ui.dp(28))
             fitsSystemWindows = true
         }
         setContentView(ScrollView(this).apply { isFillViewport = true; addView(body) })
@@ -83,25 +84,35 @@ class ScannerActivity : AppCompatActivity() {
         super.onSaveInstanceState(outState)
     }
     private fun label(value: String, title: Boolean = false) = TextView(this).apply {
-        text = value; textSize = if (title) 24f else 16f
+        text = value; textSize = if (title) 25f else 14f
         typeface = ResourcesCompat.getFont(this@ScannerActivity, if (title) R.font.montserrat_semibold else R.font.montserrat_regular)
-        setTextColor(if (vm.state.value?.step == ScannerStep.RESULT) getColor(R.color.home_ink) else android.graphics.Color.WHITE)
-        setPadding(0, 12, 0, 12)
+        setTextColor(getColor(if (title) R.color.home_ink else R.color.home_secondary))
+        setLineSpacing(ui.dp(4).toFloat(), 1f)
+        setPadding(0, ui.dp(10), 0, ui.dp(12))
     }
     private fun button(value: String, enabled: Boolean = true, action: () -> Unit) {
-        body.addView(Button(this).apply {
-            text = value; isEnabled = enabled
-            typeface = ResourcesCompat.getFont(this@ScannerActivity, R.font.montserrat_semibold)
-            isAllCaps = false
-            backgroundTintList = android.content.res.ColorStateList.valueOf(getColor(R.color.home_button))
-            setTextColor(getColor(R.color.home_button_text)); setOnClickListener { action() }
-        })
+        val secondary = value.startsWith("Voltar") || value.startsWith("Cancelar") || value.contains("novamente") || value.startsWith("Repetir")
+        body.addView(ui.button(value, !secondary, action).apply {
+            isEnabled = enabled; alpha = if (enabled) 1f else .45f
+        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = ui.dp(12) })
     }
     private fun choices(prompt: String, entries: List<CatalogItem>, selected: Long?, changed: (Long?) -> Unit) {
         body.addView(label(prompt))
         val values = listOf(CatalogItem(0, "Selecione…")) + entries
         body.addView(Spinner(this).apply {
-            adapter = ArrayAdapter(this@ScannerActivity, android.R.layout.simple_spinner_dropdown_item, values)
+            background = ui.shape(border = true); minimumHeight = ui.dp(58)
+            setPadding(ui.dp(12), ui.dp(4), ui.dp(12), ui.dp(4))
+            adapter = object : ArrayAdapter<CatalogItem>(this@ScannerActivity, android.R.layout.simple_spinner_dropdown_item, values) {
+                override fun getView(position: Int, convertView: View?, parent: android.view.ViewGroup): View =
+                    (super.getView(position, convertView, parent) as TextView).apply {
+                        typeface = ui.text("").typeface; textSize = 14f; setTextColor(getColor(R.color.home_ink))
+                    }
+                override fun getDropDownView(position: Int, convertView: View?, parent: android.view.ViewGroup): View =
+                    (super.getDropDownView(position, convertView, parent) as TextView).apply {
+                        setTextColor(getColor(R.color.home_ink)); setBackgroundColor(getColor(R.color.home_surface))
+                        setPadding(ui.dp(16), ui.dp(16), ui.dp(16), ui.dp(16))
+                    }
+            }
             setSelection(values.indexOfFirst { it.id == selected }.coerceAtLeast(0))
             onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
                 override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
@@ -115,6 +126,8 @@ class ScannerActivity : AppCompatActivity() {
     private fun number(prompt: String, current: String, changed: (String) -> Unit) {
         body.addView(label(prompt))
         body.addView(EditText(this).apply {
+            background = ui.shape(border = true); typeface = ui.text("").typeface; textSize = 16f
+            setTextColor(getColor(R.color.home_ink)); setPadding(ui.dp(18), ui.dp(16), ui.dp(18), ui.dp(16))
             inputType = InputType.TYPE_CLASS_NUMBER; isSaveEnabled = false; setText(current)
             filters = arrayOf(android.text.InputFilter.LengthFilter(10))
             addTextChangedListener(object : android.text.TextWatcher {
@@ -143,10 +156,10 @@ class ScannerActivity : AppCompatActivity() {
         if (state.step == ScannerStep.COMPLETE || state.step == ScannerStep.RESULT && state.pending == null && !state.loading)
             store.edit().remove(owner).apply()
         body.removeAllViews()
-        body.setPadding(24, 48, 24, 24)
-        body.background = if (state.step == ScannerStep.RESULT) android.graphics.drawable.ColorDrawable(getColor(R.color.home_surface))
-            else android.graphics.drawable.GradientDrawable(android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(getColor(R.color.home_header_top), getColor(R.color.home_header_middle), getColor(R.color.home_header_top)))
+        body.setPadding(ui.dp(20), ui.dp(20), ui.dp(20), ui.dp(28))
+        body.setBackgroundColor(getColor(R.color.home_background_middle))
+        window.statusBarColor = getColor(R.color.home_background_middle)
+        window.navigationBarColor = getColor(R.color.home_background_middle)
         if (state.loading) {
             body.setPadding(0, 0, 0, 0)
             if (state.step == ScannerStep.START) {
@@ -155,6 +168,14 @@ class ScannerActivity : AppCompatActivity() {
                     LinearLayout.LayoutParams(-1, resources.displayMetrics.heightPixels))
             return
         }
+        body.addView(ui.button("‹  Voltar") { finish() }, LinearLayout.LayoutParams(-2, ui.dp(48)))
+        val stepIndex = when (state.step) {
+            ScannerStep.START, ScannerStep.PREVIEW -> 1
+            ScannerStep.RESULT -> 2
+            else -> 3
+        }
+        body.addView(ui.text("ETAPA $stepIndex DE 3  ·  GÔNDOLAS", 11f, strong = true, muted = true),
+            LinearLayout.LayoutParams(-1, -2).apply { topMargin = ui.dp(24) })
         body.addView(label(when {
             state.loading && state.step == ScannerStep.RESULT -> "Registrando reposição…"
             state.loading && state.step == ScannerStep.PREVIEW -> "Analisando gôndola…"
@@ -165,7 +186,10 @@ class ScannerActivity : AppCompatActivity() {
             state.step == ScannerStep.PREVIEW -> "Confira a foto"
             else -> "Scanner de gôndolas"
         }, title = true))
-        if (state.error.isNotBlank()) body.addView(label(state.error).apply { accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE })
+        if (state.error.isNotBlank()) body.addView(label(state.error).apply {
+            background = ui.shape(border = true); setPadding(ui.dp(16), ui.dp(16), ui.dp(16), ui.dp(16))
+            accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
+        })
         if (state.step == ScannerStep.COMPLETE) {
             body.addView(ImageView(this).apply { setImageResource(R.drawable.scanner_check) },
                 LinearLayout.LayoutParams(-1, (230 * resources.displayMetrics.density).toInt()).apply {
@@ -200,8 +224,11 @@ class ScannerActivity : AppCompatActivity() {
             return
         }
         if (state.step == ScannerStep.START || state.step == ScannerStep.PREVIEW) {
-            body.addView(label("Selecione uma gôndola atribuída a você. A foto será enviada ao serviço de IA e ao provedor Gemini para análise, sem armazenamento permanente no Kairos."))
+            if (state.photo == null) body.addView(ui.empty(R.drawable.home_camera,
+                "Um novo olhar para o estoque", "Escolha a gôndola, enquadre os produtos e tire uma foto nítida para começar."),
+                LinearLayout.LayoutParams(-1, -2).apply { topMargin = ui.dp(12); bottomMargin = ui.dp(12) })
             choices("Gôndola", catalog.shelves, state.shelfId, vm::shelf)
+            body.addView(label("A imagem será analisada pelo Gemini, sem armazenamento permanente no Kairos. Confira os resultados antes de registrar a reposição."))
             if (state.photo != null) {
                 val bitmap = BitmapFactory.decodeFile(state.photo.path, BitmapFactory.Options().apply { inSampleSize = 8 })
                 body.addView(ImageView(this).apply { setImageBitmap(bitmap); adjustViewBounds = true },

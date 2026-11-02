@@ -582,7 +582,10 @@ class StockerHomeView(
     }
 
     private fun events(values: List<HomeEvent>, empty: Int, firstGap: Float = 28f) {
-        if (values.isEmpty()) { add(label(str(empty), 16f, secondary), firstGap); return }
+        if (values.isEmpty()) {
+            add(UiKit(context).empty(R.drawable.home_check, "Tudo em dia por aqui", "Nenhuma pendência no momento. As próximas tarefas aparecerão aqui."), firstGap)
+            return
+        }
         values.forEachIndexed { index, event -> add(eventCard(event), if (index == 0) firstGap else 18f) }
     }
 
@@ -716,13 +719,15 @@ class StockerHomeView(
     private fun renderAlerts() {
         val data = state.data ?: return
         sectionLabel(str(R.string.restocking_pending), 24f)
-        if (data.restockingAlerts.isEmpty()) add(label(str(R.string.home_empty_alerts), 16f, secondary), 12f)
+        if (data.restockingAlerts.isEmpty()) add(UiKit(context).empty(R.drawable.home_bell,
+            "Tudo tranquilo nas gôndolas", "Não há alertas abertos. Quando algum produto precisar de atenção, você verá aqui."), 12f)
         data.restockingAlerts.forEach { add(productCard(it), 10f) }
         sectionLabel(str(R.string.restocking_recent), 16f)
         val today = LocalDate.now(ZoneId.of("America/Sao_Paulo"))
         val completed = HistoryFilter(period = HistoryPeriod.TODAY)
             .apply(data.restockingHistory, today, ZoneId.of("America/Sao_Paulo"))
-        if (completed.isEmpty()) add(label(str(R.string.restocking_empty_recent), 16f, secondary), 12f)
+        if (completed.isEmpty()) add(UiKit(context).empty(R.drawable.home_check,
+            "Seu dia está começando", "As reposições concluídas hoje aparecerão aqui, assim que forem registradas."), 12f)
         completed.take(2).forEach { add(productCard(it), 10f) }
     }
 
@@ -963,8 +968,12 @@ class StockerHomeView(
         val records = historyFilter.apply(state.data?.restockingHistory.orEmpty(), LocalDate.now(ZoneId.of("America/Sao_Paulo")), ZoneId.of("America/Sao_Paulo"))
         container.contentDescription = resources.getQuantityString(R.plurals.history_result_count, records.size, records.size)
         if (records.isEmpty()) {
-            container.addView(label(str(if (historyFilter == HistoryFilter()) R.string.history_empty else R.string.history_no_results),
-                16f, secondary), LinearLayout.LayoutParams(-1, -2).apply { setMargins(px(25f), px(24f), px(19f), 0) })
+            val unfiltered = historyFilter == HistoryFilter()
+            container.addView(UiKit(context).empty(R.drawable.home_clock,
+                if (unfiltered) "Sua jornada começa aqui" else "Nenhuma reposição encontrada",
+                if (unfiltered) "Suas reposições registradas ficam organizadas aqui para você acompanhar cada etapa."
+                else "Experimente outro período ou ajuste a busca para encontrar o que procura."),
+                LinearLayout.LayoutParams(-1, -2).apply { setMargins(px(25f), px(24f), px(19f), 0) })
             return
         }
         records.groupBy { it.occurredAt.atZone(ZoneId.of("America/Sao_Paulo")).toLocalDate() }.forEach { (date, group) ->

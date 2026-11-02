@@ -1,103 +1,135 @@
 package com.example.kairos.view
 
+import android.graphics.Color
+import android.view.Gravity
 import android.view.View
 import android.widget.*
 import android.text.InputFilter
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.Observer
 import com.example.kairos.viewmodel.*
 import com.example.kairos.R
-import androidx.core.content.res.ResourcesCompat
-import android.graphics.Color
-import android.graphics.drawable.GradientDrawable
-import android.view.Gravity
 
-/** Activity-owned ViewModel retains the conversation when this panel closes. No transcript in saved bundles. */
-class ChatDialog(private val activity: AppCompatActivity, vm: ChatViewModel) {
-    private fun dp(value: Int) = (activity.resources.displayMetrics.density * value).toInt()
-    private val font = ResourcesCompat.getFont(activity, R.font.montserrat_medium)
-    private fun style(button: Button): Button = button.apply {
-        typeface = font; isAllCaps = false; textSize = 15f
-        setTextColor(activity.getColor(R.color.home_ink))
-        backgroundTintList = null
-        background = GradientDrawable().apply { setColor(activity.getColor(R.color.home_surface)); cornerRadius = dp(20).toFloat() }
-        setPadding(dp(12), dp(8), dp(12), dp(8)); minimumHeight = dp(56)
-    }
+/** Activity-owned state keeps drafts and conversations across panel changes. */
+class ChatDialog(private val activity: AppCompatActivity, private val vm: ChatViewModel) {
+    private val ui = UiKit(activity)
+    private fun dp(value: Int) = ui.dp(value)
     private val body = LinearLayout(activity).apply {
-        orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(12), dp(16), dp(12))
-        background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-            intArrayOf(activity.getColor(R.color.home_header_top), activity.getColor(R.color.home_header_middle), activity.getColor(R.color.home_header_bottom)))
+        orientation = LinearLayout.VERTICAL
+        setBackgroundColor(ui.color(R.color.home_background_middle))
     }
+    private val content = LinearLayout(activity).apply {
+        orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(20), dp(20), dp(20))
+    }
+    private val feedback = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
     private val input = EditText(activity).apply {
-        hint = "Faça uma pergunta…"; isSaveEnabled = false; filters = arrayOf(InputFilter.LengthFilter(10000))
-        typeface = font; setText(vm.ui.value?.draft.orEmpty())
-        setTextColor(activity.getColor(R.color.home_ink)); setHintTextColor(activity.getColor(R.color.home_secondary))
-        setPadding(dp(20), dp(12), dp(20), dp(12))
-        background = GradientDrawable().apply { setColor(activity.getColor(R.color.home_surface)); cornerRadius = dp(32).toFloat() }
+        hint = "Pergunte ao Kairos…"; isSaveEnabled = false; maxLines = 5; minLines = 1
+        filters = arrayOf(InputFilter.LengthFilter(10000)); textSize = 15f
+        typeface = ui.text("").typeface; setText(vm.ui.value?.draft.orEmpty())
+        setTextColor(ui.color(R.color.home_ink)); setHintTextColor(ui.color(R.color.home_secondary))
+        background = null; setPadding(dp(8), dp(12), dp(8), dp(12))
     }
-    private val content = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(8), dp(8), dp(8), dp(8)) }
-    private val feedback = TextView(activity).apply { setTextColor(Color.WHITE); typeface = font; accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE }
     private val send = ImageButton(activity).apply {
         setImageResource(R.drawable.chat_send); contentDescription = "Enviar mensagem"
-        background = GradientDrawable().apply { setColor(activity.getColor(R.color.home_surface)); cornerRadius = dp(32).toFloat() }
-        setOnClickListener { vm.draft(input.text.toString()); vm.send() }
+        imageTintList = android.content.res.ColorStateList.valueOf(ui.color(R.color.home_button_text))
+        background = ui.shape(R.color.home_button, 16)
+        setOnClickListener { if (input.text.isNotBlank()) { vm.draft(input.text.toString()); vm.send() } }
     }
-    private val list = style(Button(activity)).apply { text = "Conversas"; setOnClickListener { vm.draft(input.text.toString()); vm.list() } }
-    private val new = style(Button(activity)).apply { text = "Nova conversa"; setOnClickListener { vm.draft(input.text.toString()); vm.create() } }
-    private val more = style(Button(activity)).apply { text = "Mais conversas"; setOnClickListener { vm.draft(input.text.toString()); vm.list(next = true) } }
+    private val composer = LinearLayout(activity).apply {
+        gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), dp(6), dp(8), dp(6))
+        background = ui.shape(border = true)
+        addView(input, LinearLayout.LayoutParams(0, -2, 1f))
+        addView(send, LinearLayout.LayoutParams(dp(48), dp(48)))
+    }
+    private val list = ui.button("Conversas") { vm.draft(input.text.toString()); vm.list() }
+    private val new = ui.button("+ Nova", true) { vm.draft(input.text.toString()); vm.create() }
+    private val more = ui.button("Carregar mais") { vm.list(next = true) }
     private val dialog = androidx.appcompat.app.AppCompatDialog(activity, R.style.Theme_Kairos).apply {
         supportRequestWindowFeature(android.view.Window.FEATURE_NO_TITLE)
         setContentView(body, android.view.ViewGroup.LayoutParams(-1, -1))
     }
+    private fun spaced(view: View, top: Int = 12) = content.addView(view,
+        LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(top) })
     init {
-        val header = LinearLayout(activity).apply { gravity = Gravity.CENTER_VERTICAL }
-        header.addView(ImageButton(activity).apply {
+        val header = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(16), dp(20), dp(18))
+            setBackgroundColor(ui.color(R.color.home_surface))
+        }
+        val row = LinearLayout(activity).apply { gravity = Gravity.CENTER_VERTICAL }
+        row.addView(ImageButton(activity).apply {
             setImageResource(R.drawable.scanner_back); background = null; contentDescription = "Voltar"
+            imageTintList = android.content.res.ColorStateList.valueOf(ui.color(R.color.home_ink))
             setOnClickListener { dialog.dismiss() }
-        }, LinearLayout.LayoutParams(dp(48), dp(48)))
-        header.addView(TextView(activity).apply { text = "Ajuda e Suporte"; textSize = 24f;
-            typeface = ResourcesCompat.getFont(activity, R.font.montserrat_semibold); setTextColor(Color.WHITE) })
-        body.addView(header)
+        }, LinearLayout.LayoutParams(dp(44), dp(48)))
+        row.addView(LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(ui.text("Assistente Kairos", 22f, strong = true))
+            addView(ui.text("Uma ajuda para a sua rotina", 12f, muted = true))
+        }, LinearLayout.LayoutParams(0, -2, 1f))
+        header.addView(row)
         val actions = LinearLayout(activity)
-        listOf(list, new).forEach { actions.addView(it, LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(4), dp(8), dp(4), dp(8)) }) }
-        body.addView(actions); body.addView(feedback)
-        body.addView(ScrollView(activity).apply {
-            background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(activity.getColor(R.color.home_subtle_tile), activity.getColor(R.color.home_surface)))
-            addView(content)
-        }, LinearLayout.LayoutParams(-1, 0, 1f))
-        body.addView(more)
-        val composer = LinearLayout(activity).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(12), 0, 0) }
-        composer.addView(input, LinearLayout.LayoutParams(0, -2, 1f))
-        composer.addView(send, LinearLayout.LayoutParams(dp(62), dp(62)).apply { marginStart = dp(8) })
-        body.addView(composer)
+        actions.addView(list, LinearLayout.LayoutParams(0, dp(50), 1f).apply { topMargin = dp(16); marginEnd = dp(10) })
+        actions.addView(new, LinearLayout.LayoutParams(0, dp(50), 1f).apply { topMargin = dp(16) })
+        header.addView(actions); body.addView(header)
+        body.addView(feedback)
+        body.addView(ScrollView(activity).apply { isFillViewport = true; addView(content) }, LinearLayout.LayoutParams(-1, 0, 1f))
+        val bottom = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(10), dp(16), dp(12))
+            setBackgroundColor(ui.color(R.color.home_surface)); addView(composer)
+            addView(ui.text("Confira informações importantes antes de agir.", 10f, muted = true).apply {
+                gravity = Gravity.CENTER; setPadding(0, dp(8), 0, 0)
+            })
+        }
+        body.addView(bottom)
         val observer = Observer<ChatState> { state ->
-            content.removeAllViews()
-            if (state.messages.isEmpty() && state.conversations.isEmpty()) {
-                listOf("Não consigo escanear a gôndola.", "Como desativo os alertas?", "Como altero minha senha?").forEach { question ->
-                    content.addView(style(Button(activity)).apply { text = question; setOnClickListener { input.setText(question) } },
-                        LinearLayout.LayoutParams(-1, dp(68)).apply { topMargin = dp(12) })
+            content.removeAllViews(); feedback.removeAllViews()
+            if (state.error.isNotBlank()) {
+                feedback.setPadding(dp(20), dp(12), dp(20), 0)
+                feedback.addView(ui.text("Não foi possível concluir agora", 14f, strong = true))
+                feedback.addView(ui.text(state.error, 13f, muted = true).apply {
+                    accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
+                })
+            } else feedback.setPadding(0, 0, 0, 0)
+            if (state.loading) {
+                spaced(LinearLayout(activity).apply {
+                    gravity = Gravity.CENTER_VERTICAL
+                    addView(ProgressBar(activity), LinearLayout.LayoutParams(dp(24), dp(24)))
+                    addView(ui.text("Só um instante…", 14f, muted = true), LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(12) })
+                })
+            }
+            if (state.browsing) {
+                spaced(ui.text("Suas conversas", 20f, strong = true), 0)
+                if (!state.loading && state.conversations.isEmpty()) spaced(ui.empty(R.drawable.chat_bubble,
+                    "Um novo começo", "Você ainda não tem conversas. Toque em + Nova para começar."))
+                state.conversations.forEach { conversation ->
+                    spaced(ui.button(conversation.label + "   ›") { vm.draft(input.text.toString()); vm.open(conversation.id) }.apply {
+                        gravity = Gravity.START or Gravity.CENTER_VERTICAL; isEnabled = !state.loading
+                    })
+                }
+            } else if (state.messages.isEmpty()) {
+                spaced(ui.empty(R.drawable.chat_bubble, "Como posso ajudar?",
+                    "Tire dúvidas sobre o estoque e encontre orientação para o seu dia."), 12)
+                spaced(ui.text("PARA COMEÇAR", 11f, strong = true, muted = true), 28)
+                listOf("Quais produtos precisam de reposição?", "Como escanear uma gôndola?", "Onde encontro meu histórico?").forEach { question ->
+                    spaced(ui.button(question + "   ↗") { input.setText(question); input.setSelection(input.length()) }.apply { gravity = Gravity.START or Gravity.CENTER_VERTICAL })
                 }
             }
-            state.conversations.forEach { conversation -> content.addView(style(Button(activity)).apply {
-                text = conversation.label; isEnabled = !state.loading; setOnClickListener { vm.draft(input.text.toString()); vm.open(conversation.id) }
-            }) }
-            state.messages.forEach { message -> content.addView(TextView(activity).apply {
-                text = buildString {
-                    append(if (message.sender == "AI") "Kairos: " else "Você: ")
-                    append(message.content)
-                    if (message.blocked) append("\nResposta bloqueada pelas regras de acesso.")
-                    else if (!message.approved) append("\nResposta não aprovada pelo serviço.")
-                    if (message.sources.isNotEmpty()) append("\nFontes: " + message.sources.joinToString(", "))
-                }
-                typeface = font; textSize = 16f; setTextColor(activity.getColor(R.color.home_ink))
-                setPadding(dp(16), dp(16), dp(16), dp(16))
-                background = GradientDrawable().apply { setColor(activity.getColor(if (message.sender == "AI") R.color.home_surface else R.color.home_subtle_tile)); cornerRadius = dp(20).toFloat() }
-            }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) }) }
-            feedback.text = if (state.loading) "Processando…" else state.error
-            listOf(send, list, new, more).forEach { it.isEnabled = !state.loading }
-            more.visibility = if (state.hasNext) View.VISIBLE else View.GONE
+            state.messages.forEach { message ->
+                val ai = message.sender == "AI"
+                spaced(LinearLayout(activity).apply {
+                    orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(16), dp(18), dp(16))
+                    background = ui.shape(if (ai) R.color.home_surface else R.color.home_subtle_tile, 22, ai)
+                    addView(ui.text(if (ai) "KAIROS" else "VOCÊ", 10f, strong = true, muted = true))
+                    addView(ui.text(message.content, 15f).apply { setTextIsSelectable(true) }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+                    if (message.blocked || !message.approved) addView(ui.text("Esta resposta não foi aprovada. Confira as informações antes de usar.", 12f, muted = true))
+                    if (message.sources.isNotEmpty()) addView(ui.text("Fontes: " + message.sources.joinToString(", ") {
+                        when (it) { "pdf" -> "Manual Kairos"; "database" -> "Dados do mercado"; "memory" -> "Contexto da conversa"; else -> it }
+                    }, 11f, muted = true))
+                })
+            }
+            if (state.hasNext && state.browsing) spaced(more)
+            listOf(send, list, new, more).forEach { it.isEnabled = !state.loading; it.alpha = if (state.loading) .5f else 1f }
+            composer.visibility = if (state.browsing) View.GONE else View.VISIBLE
             input.isEnabled = !state.loading
             if (state.draft.isEmpty() && !state.loading && state.error.isEmpty()) input.text.clear()
         }
@@ -107,17 +139,14 @@ class ChatDialog(private val activity: AppCompatActivity, vm: ChatViewModel) {
     fun show() {
         dialog.show()
         dialog.window?.apply {
-            addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
-            setLayout(-1, -1)
+            addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE); setLayout(-1, -1)
             setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
-            statusBarColor = activity.getColor(R.color.home_header_top)
-            navigationBarColor = activity.getColor(R.color.home_header_bottom)
+            statusBarColor = ui.color(R.color.home_surface); navigationBarColor = ui.color(R.color.home_surface)
             setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         }
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(body) { view, insets ->
             val safe = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars() or androidx.core.view.WindowInsetsCompat.Type.ime())
-            view.setPadding(dp(16) + safe.left, dp(12) + safe.top, dp(16) + safe.right, dp(12) + safe.bottom)
-            insets
+            view.setPadding(safe.left, safe.top, safe.right, safe.bottom); insets
         }
         androidx.core.view.ViewCompat.requestApplyInsets(body)
     }

@@ -24,22 +24,26 @@ class AnalysisProgressView(context: Context, private val confirming: Boolean) : 
         duration = 2000; repeatCount = ValueAnimator.INFINITE; interpolator = LinearInterpolator()
         addUpdateListener { angle = it.getAnimatedValue("angle") as Float; invalidate() }
     }
-    init { contentDescription = if (confirming) "Registrando reposição no servidor" else "Analisando gôndola" }
+    init {
+        contentDescription = if (confirming) "Registrando reposição no servidor" else "Analisando gôndola"
+        spinner.setTint(context.getColor(R.color.home_icon_accent))
+    }
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
-        backgroundPaint.shader = LinearGradient(0f, 0f, 0f, h.toFloat(),
-            intArrayOf(0xFF0D6249.toInt(), 0xFF047C58.toInt(), 0xFF0D6249.toInt()), floatArrayOf(0f, .51923f, 1f), Shader.TileMode.CLAMP)
+        backgroundPaint.color = context.getColor(R.color.home_background_middle)
     }
     override fun onDraw(canvas: Canvas) {
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), backgroundPaint)
         val scale = minOf(width / 412f, height / 917f)
         val centerX = width / 2f; val centerY = height * .453f
+        paint.color = context.getColor(R.color.home_subtle_tile)
+        canvas.drawCircle(centerX, centerY, 82 * scale, paint)
         canvas.save(); canvas.rotate(angle, centerX, centerY)
         spinner.setBounds((centerX - 37 * scale).toInt(), (centerY - 57 * scale).toInt(),
             (centerX + 37 * scale).toInt(), (centerY + 57 * scale).toInt())
         spinner.draw(canvas); canvas.restore()
-        paint.textAlign = Paint.Align.CENTER; paint.color = Color.WHITE; paint.textSize = 24 * scale
+        paint.textAlign = Paint.Align.CENTER; paint.color = context.getColor(R.color.home_ink); paint.textSize = 24 * scale
         canvas.drawText(if (confirming) "Registrando reposição…" else "Analisando gôndola…", centerX, height * .57f, paint)
-        paint.textSize = 16 * scale; paint.color = 0xBFFFFFFF.toInt()
+        paint.textSize = 14 * scale; paint.color = context.getColor(R.color.home_secondary)
         canvas.drawText(if (confirming) "Aguarde a confirmação do servidor." else "Identificando os produtos visíveis.", centerX, height * .62f, paint)
         if (!confirming) canvas.drawText("A foto não determina o saldo de estoque.", centerX, height * .65f, paint)
     }
