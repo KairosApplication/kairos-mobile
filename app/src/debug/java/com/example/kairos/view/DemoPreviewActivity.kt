@@ -41,12 +41,12 @@ class DemoPreviewActivity : AppCompatActivity() {
             setOnClickListener { finish() }
         })
         root.addView(banner)
+        setContentView(root)
         val uid = "local-demo-preview"
         val user = SignedInUser(uid, "demonstracao@kairos.local", UserProfile(uid, "Demonstração", "", LocalDate.of(2000, 1, 1),
             "", "demonstracao@kairos.local", "", "preview"))
         home = StockerHomeView(this, onRetry = {}, onLogout = { finish() })
         root.addView(home, LinearLayout.LayoutParams(-1, 0, 1f))
-        setContentView(root)
         home.updateSession(user, false, "")
         home.bind(StockerHomeUiState(data = DemoStockerHomeRepository().load(uid)))
         home.restore(savedInstanceState?.getBundle("previewHome"))

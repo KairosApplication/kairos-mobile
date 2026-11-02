@@ -28,8 +28,12 @@ class ServiceIntegrationTest {
     private val id = "000000000000000000000001"
 
     @Test fun debugPreviewShowsFictionalDataAndCanCloseWithoutAuthenticating() {
+        val destroyed = CountDownLatch(1)
         ActivityScenario.launch(com.example.kairos.view.DemoPreviewActivity::class.java).use { scenario ->
             scenario.onActivity { activity ->
+                activity.lifecycle.addObserver(object : androidx.lifecycle.DefaultLifecycleObserver {
+                    override fun onDestroy(owner: androidx.lifecycle.LifecycleOwner) { destroyed.countDown() }
+                })
                 fun texts(view: android.view.View): List<String> = when (view) {
                     is android.widget.TextView -> listOf(view.text.toString())
                     is android.view.ViewGroup -> (0 until view.childCount).flatMap { texts(view.getChildAt(it)) }
@@ -40,8 +44,7 @@ class ServiceIntegrationTest {
                 assertTrue(texts(activity.window.decorView).any { it.contains("Coca Cola") })
                 activity.findViewById<android.view.View>(R.id.demo_preview_exit).performClick()
             }
-            instrumentation.waitForIdleSync()
-            assertEquals(androidx.lifecycle.Lifecycle.State.DESTROYED, scenario.state)
+            assertTrue("Preview should close after leaving the demonstration", destroyed.await(10, TimeUnit.SECONDS))
         }
     }
 
