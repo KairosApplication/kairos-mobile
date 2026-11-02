@@ -11,7 +11,6 @@ interface AuthGateway {
     fun signOut()
     fun currentUid(): String? = current()?.uid
     fun refreshToken() = Unit
-    fun sendVerification() = Unit
     fun requestEmailChange(uid: String, email: String, password: String): Unit = error("Operação indisponível.")
     fun changePassword(uid: String, currentPassword: String, newPassword: String): Unit = error("Operação indisponível.")
 }

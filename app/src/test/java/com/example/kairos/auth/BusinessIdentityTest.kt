@@ -21,7 +21,7 @@ class BusinessIdentityTest {
         assertNull(SignedInUser("uid", "test@example.com", profile).business)
     }
 
-    @Test fun noBusinessCallIsMadeForUnverifiedEmail() {
+    @Test fun businessLoginAndLinkDoNotRequireEmailConfirmation() {
         val auth = object : AuthGateway {
             override fun create(email: String, password: String) = error("unused")
             override fun signIn(email: String, password: String) = current()
@@ -34,14 +34,14 @@ class BusinessIdentityTest {
             override fun create(profile: UserProfile) = profile
         }
         val business = object : BusinessSessionGateway {
-            override fun session(uid: String): BusinessIdentity = error("Unverified email reached backend")
-            override fun link(uid: String, password: String): BusinessIdentity = error("Unverified email linked account")
+            override fun session(uid: String) = BusinessIdentity(1, 2, 3, "STOCKER", "Store")
+            override fun link(uid: String, password: String) = session(uid)
         }
         val repo = FirebaseAuthRepository(auth, profiles, business)
         val user = repo.login("test@example.com", "test-password")
         assertFalse(user.emailVerified)
-        assertNull(user.business)
-        try { repo.linkBusinessAccount("test-password"); fail() } catch (_: IllegalArgumentException) { }
+        assertTrue(user.business!!.canRestock)
+        assertTrue(repo.linkBusinessAccount("test-password").business!!.canRestock)
     }
 
     @Test fun accountSwitchDuringBusinessLookupRejectsOldIdentity() {

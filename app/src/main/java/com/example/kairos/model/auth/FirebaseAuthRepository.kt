@@ -12,7 +12,6 @@ class FirebaseAuthRepository(
         require(password.length >= 6) { "Use uma senha com pelo menos 6 caracteres." }
         val identity = auth.create(email, password)
         val user = SignedInUser(identity.uid, identity.email, null, identity.emailVerified)
-        try { auth.sendVerification() } catch (error: Exception) { throw ProfileIncompleteException(user, error) }
         return user
     }
 
@@ -21,7 +20,6 @@ class FirebaseAuthRepository(
         val identity = auth.create(request.email, request.password)
         return try {
             val profile = profiles.create(request.details().toProfile(identity.uid, identity.email))
-            auth.sendVerification()
             session(identity)
         } catch (e: Exception) {
             throw ProfileIncompleteException(SignedInUser(identity.uid, identity.email, null), e)
@@ -45,7 +43,7 @@ class FirebaseAuthRepository(
             check(profile.uid == identity.uid) { "Perfil não corresponde à sessão." }
         }
         assertOwner(identity.uid)
-        val scope = if (identity.emailVerified && business != null) {
+        val scope = if (business != null) {
             auth.refreshToken()
             assertOwner(identity.uid)
             business.session(identity.uid)
@@ -69,12 +67,9 @@ class FirebaseAuthRepository(
 
     override fun logout() = auth.signOut()
 
-    override fun sendVerification() = auth.sendVerification()
-
     override fun linkBusinessAccount(password: String): SignedInUser {
         AuthValidation.password(password)
         val identity = auth.current() ?: throw AccountChangedException()
-        require(identity.emailVerified) { "Verifique seu e-mail antes de vincular a conta." }
         business?.link(identity.uid, password) ?: error("Vínculo indisponível.")
         assertOwner(identity.uid)
         return session(identity)
@@ -82,7 +77,6 @@ class FirebaseAuthRepository(
 
     override fun registerCustomer(): SignedInUser {
         val identity = auth.current() ?: throw AccountChangedException()
-        require(identity.emailVerified) { "Verifique seu e-mail primeiro." }
         val profile = profiles.read(identity.uid) ?: throw IllegalArgumentException("Complete seu perfil primeiro.")
         assertOwner(identity.uid)
         business?.register(identity.uid, profile) ?: error("Cadastro indisponível.")

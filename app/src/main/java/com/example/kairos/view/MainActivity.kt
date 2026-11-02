@@ -140,7 +140,7 @@ class MainActivity : AppCompatActivity() {
             } else if (state.canStartOnboarding) {
                 showOnboarding(root)
             }
-            if (renderedScreen != state.screen || !state.loading && state.screen in listOf(AuthScreen.BUSINESS_ACCESS, AuthScreen.VERIFY_EMAIL)) render(state)
+            if (renderedScreen != state.screen || !state.loading && state.screen == AuthScreen.BUSINESS_ACCESS) render(state)
             authEntry.update(state)
             if (state.screen == AuthScreen.HOME) {
                 state.user?.let { com.example.kairos.model.home.StockerPreferences(this, it.uid).applyTheme(this) }
@@ -382,7 +382,6 @@ class MainActivity : AppCompatActivity() {
                 AuthScreen.REGISTER -> "Cadastrar usuário"
                 AuthScreen.RECOVERY -> "Recuperar senha"
                 AuthScreen.COMPLETE_PROFILE -> "Completar cadastro"
-                AuthScreen.VERIFY_EMAIL -> "Verifique seu e-mail"
                 AuthScreen.BUSINESS_ACCESS -> "Acesso à empresa"
                 AuthScreen.HOME -> "Bem-vindo, ${state.user?.name.orEmpty()}"
             }
@@ -415,11 +414,6 @@ class MainActivity : AppCompatActivity() {
             AuthScreen.RECOVERY -> {
                 field("email", "Email cadastrado", emailType)
                 button("Enviar link de recuperação") { vm.requestResetLink(value("email").trim()) }
-            }
-            AuthScreen.VERIFY_EMAIL -> {
-                form.addView(TextView(this).apply { text = "Confirme o link enviado para seu e-mail antes de acessar os serviços." })
-                button("Enviar link de verificação") { vm.resendVerification() }
-                button("Já confirmei meu e-mail") { vm.reloadSession() }
             }
             AuthScreen.BUSINESS_ACCESS -> {
                 val linked = state.user?.business?.userId != null

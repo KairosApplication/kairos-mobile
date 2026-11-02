@@ -78,11 +78,6 @@ class FirebaseAuthGateway(private val auth: FirebaseAuth) : AuthGateway {
 
     override fun signOut() = auth.signOut()
 
-    override fun sendVerification() = translate {
-        (auth.currentUser ?: throw AccountChangedException()).sendEmailVerification().resultInWorker()
-        Unit
-    }
-
     override fun currentUid() = auth.currentUser?.uid
 
     override fun refreshToken() = translate {

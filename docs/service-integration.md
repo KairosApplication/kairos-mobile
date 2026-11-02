@@ -1,5 +1,7 @@
 # Integração mobile, identidade e IA
 
+> Ajuste solicitado pelo responsável: cadastro, login, vínculo e chatbot não exigem confirmação de e-mail. O envio automático e a tela de verificação foram removidos. Essa decisão substitui as referências anteriores a e-mail verificado neste relatório. A autenticação por token e o vínculo PostgreSQL continuam obrigatórios.
+
 Entrega local em 01/11/2026. Os serviços precisam ser configurados e implantados em conjunto antes do uso real. Nenhum banco remoto foi alterado e nenhuma credencial de IA foi utilizada.
 
 ## Revisão e bases

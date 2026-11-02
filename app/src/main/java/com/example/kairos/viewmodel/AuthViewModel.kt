@@ -8,7 +8,7 @@ import com.example.kairos.model.auth.*
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
-enum class AuthScreen { LOGIN, LOADING, REGISTER, RECOVERY, COMPLETE_PROFILE, VERIFY_EMAIL, BUSINESS_ACCESS, HOME }
+enum class AuthScreen { LOGIN, LOADING, REGISTER, RECOVERY, COMPLETE_PROFILE, BUSINESS_ACCESS, HOME }
 
 data class AuthUiState(
     val screen: AuthScreen = AuthScreen.LOGIN,
@@ -39,7 +39,6 @@ class AuthViewModel(private val repository: AuthRepository?) : ViewModel() {
     private fun authenticated(user: SignedInUser) = AuthUiState(
         screen = when {
             user.profile == null -> AuthScreen.COMPLETE_PROFILE
-            !user.emailVerified -> AuthScreen.VERIFY_EMAIL
             user.business?.canRestock != true -> AuthScreen.BUSINESS_ACCESS
             else -> AuthScreen.HOME
         },
@@ -115,11 +114,6 @@ class AuthViewModel(private val repository: AuthRepository?) : ViewModel() {
 
     fun completeProfile(details: ProfileDetails) = run {
         authenticated(it.completeProfile(details))
-    }
-
-    fun resendVerification() = run {
-        it.sendVerification()
-        authenticated(it.restoreSession() ?: throw AccountChangedException()).copy(message = "Link de verificação enviado. Confira seu e-mail.")
     }
 
     fun reloadSession() = run { authenticated(it.restoreSession() ?: throw AccountChangedException()) }
