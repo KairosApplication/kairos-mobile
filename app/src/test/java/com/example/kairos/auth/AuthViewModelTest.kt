@@ -52,11 +52,17 @@ class AuthViewModelTest {
     @Test fun restoredCompleteSessionNeverOffersOnboarding() {
         verifyRestoration(SignedInUser("restored", "test@example.com", UserProfile(
             "restored", "Test", "User", LocalDate.of(2000, 1, 1), "", "test@example.com", "", ""
-        )), AuthScreen.HOME)
+        ), business = BusinessIdentity(1, 2, 3, "STOCKER", "Loja")), AuthScreen.HOME)
     }
 
     @Test fun restoredIncompleteSessionNeverOffersOnboarding() {
         verifyRestoration(SignedInUser("restored", "test@example.com", null), AuthScreen.COMPLETE_PROFILE)
+    }
+
+    @Test fun authenticatedUserWithoutConfiguredBusinessServicesSeesAccessScreenInsteadOfLoginOrHome() {
+        verifyRestoration(SignedInUser("restored", "test@example.com", UserProfile(
+            "restored", "Test", "User", LocalDate.of(2000, 1, 1), "", "test@example.com", "", "public"
+        ), businessIssue = "Você entrou, mas a conexão com o mercado está pendente."), AuthScreen.BUSINESS_ACCESS)
     }
 
     @Test fun missingSessionOffersOnboardingOnlyAfterRestorationFinishes() {
@@ -92,7 +98,8 @@ class AuthViewModelTest {
 
     @Test fun accountEditsKeepHomeAndOnlyPublishConfirmedDataForTheSameOwner() {
         val initial = SignedInUser("account", "old@example.com", UserProfile("account", "João", "Silva",
-            LocalDate.of(1985, 10, 22), "12364578902", "old@example.com", "12345678", "basico"))
+            LocalDate.of(1985, 10, 22), "12364578902", "old@example.com", "12345678", "basico"),
+            business = BusinessIdentity(1, 2, 3, "STOCKER", "Loja"))
         var writes = 0
         var reject = false
         val repository = object : AuthRepository {
@@ -185,7 +192,8 @@ class AuthViewModelTest {
 
     @Test fun incorrectCurrentPasswordPublishesFailureAndPreservesTheAccount() {
         val user = SignedInUser("account", "old@example.com", UserProfile("account", "Test", "User",
-            LocalDate.of(2000, 1, 1), "", "old@example.com", "", ""))
+            LocalDate.of(2000, 1, 1), "", "old@example.com", "", ""),
+            business = BusinessIdentity(1, 2, 3, "STOCKER", "Loja"))
         val vm = AuthViewModel(object : FakeRepository(false) {
             override fun restoreSession() = user
             override fun requestEmailChange(uid: String, email: String, currentPassword: String): SignedInUser =
@@ -221,13 +229,44 @@ class AuthViewModelTest {
         } finally { vm.state.removeObserver(observer) }
     }
 
+    @Test fun businessRejectionDoesNotSignOutFirebaseOrKeepBusinessPermissions() {
+        val user = SignedInUser("account", "test@example.com", UserProfile("account", "Test", "User",
+            LocalDate.of(2000, 1, 1), "", "test@example.com", "", ""),
+            business = BusinessIdentity(1, 2, 3, "STOCKER", "Loja"))
+        var restores = 0
+        var signOuts = 0
+        val vm = AuthViewModel(object : FakeRepository(false) {
+            override fun restoreSession(): SignedInUser {
+                if (restores++ == 0) return user
+                throw com.example.kairos.model.network.ApiFailure(401)
+            }
+            override fun logout() { signOuts++ }
+        })
+        store.put("business-rejection", vm)
+        val states = LinkedBlockingQueue<AuthUiState>()
+        val observer = Observer<AuthUiState> { states.offer(it) }
+        vm.state.observeForever(observer)
+        try {
+            var initial: AuthUiState
+            do { initial = states.poll(5, TimeUnit.SECONDS) ?: error("Initial session timed out") }
+            while (initial.loading || initial.user == null)
+            states.clear()
+            vm.reloadSession()
+            var result: AuthUiState
+            do { result = states.poll(5, TimeUnit.SECONDS) ?: error("Recheck timed out") } while (result.loading)
+            assertEquals(AuthScreen.BUSINESS_ACCESS, result.screen)
+            assertEquals(user.uid, result.user!!.uid)
+            assertNull(result.user!!.business)
+            assertEquals(0, signOuts)
+        } finally { vm.state.removeObserver(observer) }
+    }
     private open class FakeRepository(private val fail: Boolean) : AuthRepository {
         override fun restoreSession(): SignedInUser? = null
         override fun login(email: String, password: String): SignedInUser {
             if (fail) throw IllegalArgumentException("Login recusado")
             return SignedInUser("test", email, UserProfile(
                 "test", "Test", "User", LocalDate.of(2000, 1, 1), "", email, "", ""
-            ))
+            ), business = BusinessIdentity(1, 2, 3, "STOCKER", "Loja"))
         }
         override fun registerAccount(email: String, password: String): SignedInUser = error("Unused")
         override fun register(request: Registration): SignedInUser = error("Unused")

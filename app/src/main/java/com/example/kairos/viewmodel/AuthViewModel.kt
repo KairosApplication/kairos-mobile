@@ -8,7 +8,7 @@ import com.example.kairos.model.auth.*
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
-enum class AuthScreen { LOGIN, LOADING, REGISTER, RECOVERY, COMPLETE_PROFILE, HOME }
+enum class AuthScreen { LOGIN, LOADING, REGISTER, RECOVERY, COMPLETE_PROFILE, BUSINESS_ACCESS, HOME }
 
 data class AuthUiState(
     val screen: AuthScreen = AuthScreen.LOGIN,
@@ -37,9 +37,13 @@ class AuthViewModel(private val repository: AuthRepository?) : ViewModel() {
     }
 
     private fun authenticated(user: SignedInUser) = AuthUiState(
-        screen = if (user.profile == null) AuthScreen.COMPLETE_PROFILE else AuthScreen.HOME,
+        screen = when {
+            user.profile == null -> AuthScreen.COMPLETE_PROFILE
+            user.business?.canRestock != true -> AuthScreen.BUSINESS_ACCESS
+            else -> AuthScreen.HOME
+        },
         user = user,
-        message = if (user.profile == null) "Complete os dados para concluir seu cadastro." else ""
+        message = if (user.profile == null) "Complete os dados para concluir seu cadastro." else user.businessIssue.orEmpty()
     )
 
     fun navigate(screen: AuthScreen) {
@@ -71,6 +75,14 @@ class AuthViewModel(private val repository: AuthRepository?) : ViewModel() {
                     "Adicione app/google-services.json para com.example.kairos e sincronize o Gradle.")).also { succeeded = true }
             } catch (e: AccountChangedException) {
                 AuthUiState(message = e.message.orEmpty())
+            } catch (e: com.example.kairos.model.network.ApiFailure) {
+                if (e.status == 401 && previous.user != null) {
+                    previous.copy(screen = AuthScreen.BUSINESS_ACCESS,
+                        user = previous.user.copy(business = null, businessIssue = "Vamos verificar novamente sua conexão com o mercado."),
+                        message = "Vamos verificar novamente sua conexão com o mercado.")
+                }
+                else if (e.status == 401) AuthUiState(message = e.message.orEmpty())
+                else previous.copy(message = e.message.orEmpty())
             } catch (e: ProfileIncompleteException) {
                 authenticated(e.user).copy(message = e.message.orEmpty() + "\n" +
                     AuthErrorMessage.from(e.cause as? Exception ?: e))
@@ -95,7 +107,6 @@ class AuthViewModel(private val repository: AuthRepository?) : ViewModel() {
     }
 
     fun registerAccount(email: String, password: String, confirmation: String, acceptedTerms: Boolean) = run {
-        require(acceptedTerms) { "Marque a opção de concordância com os termos de serviço." }
         require(password == confirmation) { "As senhas não coincidem." }
         authenticated(it.registerAccount(email, password))
     }
@@ -109,6 +120,19 @@ class AuthViewModel(private val repository: AuthRepository?) : ViewModel() {
     fun completeProfile(details: ProfileDetails) = run {
         authenticated(it.completeProfile(details))
     }
+
+    fun reloadSession() = run { authenticated(it.restoreSession() ?: throw AccountChangedException()) }
+
+    fun businessAccessInterrupted() {
+        val previous = mutableState.value ?: return
+        val user = previous.user ?: return
+        val notice = "Não conseguimos confirmar o acesso ao mercado. Toque abaixo para verificar novamente."
+        mutableState.value = previous.copy(screen = AuthScreen.BUSINESS_ACCESS, loading = false,
+            user = user.copy(business = null, businessIssue = notice), message = notice)
+    }
+
+    fun linkBusiness(password: String) = run { authenticated(it.linkBusinessAccount(password)) }
+    fun registerCustomer() = run { authenticated(it.registerCustomer()) }
 
     fun requestResetLink(email: String) = run {
         it.requestPasswordReset(email)

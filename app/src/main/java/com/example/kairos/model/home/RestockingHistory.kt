@@ -6,7 +6,7 @@ import java.time.ZoneId
 import java.time.Instant
 import java.util.Locale
 
-enum class RestockingStatus { REQUIRED, LOW_STOCK, COMPLETED }
+enum class RestockingStatus { REQUIRED, LOW_STOCK, COMPLETED, OBSERVED }
 
 data class RestockingRecord(
     val id: String,
@@ -15,7 +15,10 @@ data class RestockingRecord(
     val shelfCode: String,
     val occurredAt: Instant,
     val status: RestockingStatus,
-    val analysisId: String? = null
+    val analysisId: String? = null,
+    val restockedQuantity: Int? = null,
+    val damagedQuantity: Int? = null,
+    val productId: Long? = null
 )
 
 enum class HistoryPeriod { ALL, TODAY, YESTERDAY, LAST_SEVEN_DAYS }

@@ -6,6 +6,7 @@ import java.util.concurrent.TimeoutException
 /** Mensagens controladas: não mostram mensagens brutas que podem conter dados do usuário. */
 object AuthErrorMessage {
     fun from(error: Exception): String = when (error) {
+        is com.example.kairos.model.network.ApiFailure -> error.message.orEmpty()
         is FirebaseFirestoreException -> firestoreCode(error.code.name)
         is TimeoutException ->
             "O Firebase não respondeu em 30 segundos (TIMEOUT). Verifique a conexão e tente novamente."

@@ -3,7 +3,8 @@ plugins {
 }
 
 // Permite compilar sem credenciais; a tela explica a configuração pendente.
-if (file("google-services.json").exists()) {
+val isolatedTests = providers.gradleProperty("kairos.isolatedTests").orNull == "true"
+if (file("google-services.json").exists() && !isolatedTests) {
     apply(plugin = "com.google.gms.google-services")
 }
 
@@ -18,6 +19,8 @@ android {
     }
 
     defaultConfig {
+        buildConfigField("String", "SPRING_API_URL", "\"${providers.gradleProperty("kairos.springUrl").getOrElse("")}\"")
+        buildConfigField("String", "CHAT_API_URL", "\"${providers.gradleProperty("kairos.chatUrl").getOrElse("")}\"")
         applicationId = "com.example.kairos"
         minSdk = 29
         targetSdk = 36
@@ -28,6 +31,11 @@ android {
     }
 
     buildTypes {
+        debug {
+            if (isolatedTests) applicationIdSuffix = ".integration"
+            buildConfigField("String", "SPRING_API_URL", "\"${providers.gradleProperty("kairos.springUrl").getOrElse("http://127.0.0.1:8081")}\"")
+            buildConfigField("String", "CHAT_API_URL", "\"${providers.gradleProperty("kairos.chatUrl").getOrElse("http://127.0.0.1:8000")}\"")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
@@ -43,6 +51,9 @@ android {
 }
 
 dependencies {
+    implementation("androidx.camera:camera-camera2:1.6.2")
+    implementation("androidx.camera:camera-lifecycle:1.6.2")
+    implementation("androidx.camera:camera-view:1.6.2")
     implementation("androidx.core:core-splashscreen:1.2.0")
     implementation(platform("com.google.firebase:firebase-bom:34.19.0"))
     implementation("com.google.firebase:firebase-auth")
@@ -55,6 +66,7 @@ dependencies {
     implementation(libs.androidx.activity)
     implementation(libs.androidx.constraintlayout)
     testImplementation(libs.junit)
+    testImplementation("org.json:json:20240303")
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
 }

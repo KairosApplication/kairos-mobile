@@ -44,6 +44,7 @@ import com.example.kairos.view.settings.SettingsDestination
 import com.example.kairos.view.settings.SettingsTemplateView
 import com.example.kairos.view.settings.SettingsContentView
 import com.example.kairos.model.home.StockerPreferences
+import com.example.kairos.model.home.ShelfAnalysis
 import com.example.kairos.view.settings.ProfileView
 import com.example.kairos.view.settings.SecurityView
 import com.example.kairos.view.settings.AccountEditField
@@ -62,7 +63,11 @@ class StockerHomeView(
     private val activity: AppCompatActivity,
     private val onRetry: () -> Unit,
     private val onLogout: () -> Unit,
-    private val onAccountEdit: ((AccountEditRequest) -> Unit)? = null
+    private val onAccountEdit: ((AccountEditRequest) -> Unit)? = null,
+    private val onChat: (() -> Unit)? = null,
+    private val onScanner: (() -> Unit)? = null,
+    private val onRestock: ((List<RestockingRecord>) -> Unit)? = null,
+    private val onResultBack: (() -> Unit)? = null
 ) : FrameLayout(activity) {
     private enum class Tab(val label: Int, val icon: Int, val viewId: Int) {
         START(R.string.home_start, R.drawable.home_house, R.id.home_nav_start),
@@ -155,6 +160,9 @@ class StockerHomeView(
     private var analysisVisible = false
     private var analysisId: String? = null
     private val selectedProducts = linkedSetOf<String>()
+    private var startAction: View? = null
+    private var lastRoute: String? = null
+    private var standaloneResult = false
     private var pendingRestoredState: Bundle? = null
     private var settingsDestination = SettingsDestination.ROOT
     private var historyResults: LinearLayout? = null
@@ -328,6 +336,7 @@ class StockerHomeView(
 
     fun handleBack(): Boolean {
         if (analysisVisible) {
+            if (standaloneResult && onResultBack != null) { onResultBack.invoke(); return true }
             analysisVisible = false
             analysisId = null
             selectedProducts.clear()
@@ -344,6 +353,16 @@ class StockerHomeView(
     }
 
     fun close() { dialog?.dismiss(); dialog = null; accountEditor = null }
+
+    fun showStandaloneResult(uid: String, email: String, analysis: ShelfAnalysis) {
+        standaloneResult = true
+        user = SignedInUser(uid, email, null)
+        state = StockerHomeUiState(data = com.example.kairos.model.home.StockerHomeData(
+            analysis.products.count { it.status != RestockingStatus.COMPLETED }, 0,
+            emptyList(), emptyList(), emptyList(), false, shelfAnalysis = analysis, analyses = listOf(analysis)))
+        analysisVisible = true; analysisId = analysis.id
+        render()
+    }
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         ViewCompat.requestApplyInsets(this)
@@ -428,7 +447,12 @@ class StockerHomeView(
         val oldSearch = findViewById<EditText>(R.id.history_search)
         val restoreSearchFocus = tab == Tab.HISTORY && oldSearch?.hasFocus() == true
         val searchSelection = oldSearch?.selectionStart ?: 0
+        val route = "$tab:$analysisVisible:$analysisId:$settingsDestination"
+        val animateRoute = route != lastRoute
+        lastRoute = route
+        startAction = null
         body.removeAllViews()
+        if (animateRoute) UiMotion.reveal(body)
         historyResults = null
         filterButton = null
         body.setPadding(0, 0, 0, px(20f))
@@ -465,7 +489,7 @@ class StockerHomeView(
             add(ProgressBar(context).apply { contentDescription = str(R.string.home_loading) }, 32f, 170f)
             add(label(str(R.string.home_loading), 16f).apply { gravity = Gravity.CENTER }, 16f)
         } else if (state.failed) {
-            add(label(str(R.string.home_error), 18f).apply { accessibilityLiveRegion = ACCESSIBILITY_LIVE_REGION_POLITE }, 32f)
+            add(label(state.message.ifBlank { str(R.string.home_error) }, 18f).apply { accessibilityLiveRegion = ACCESSIBILITY_LIVE_REGION_POLITE }, 32f)
             add(textButton(str(R.string.home_retry), onRetry), 16f)
         } else {
             val data = state.data!!
@@ -514,7 +538,7 @@ class StockerHomeView(
         val firstName = user?.name?.trim()?.substringBefore(' ').orEmpty()
         contents.addView(label(if (firstName.isBlank()) str(R.string.home_greeting_fallback) else str(R.string.home_greeting, firstName),
             27f, Color.WHITE), LinearLayout.LayoutParams(-1, -2).apply { setMargins(px(25f), 0, px(25f), 0) })
-        val today = LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE, d 'de' MMMM", locale))
+        val today = LocalDate.now(ZoneId.of("America/Sao_Paulo")).format(DateTimeFormatter.ofPattern("EEEE, d 'de' MMMM", locale))
             .replaceFirstChar { it.titlecase(locale) }
         contents.addView(label(today, 18f, Color.WHITE), LinearLayout.LayoutParams(-1, -2).apply {
             setMargins(px(25f), px(3f), px(25f), 0)
@@ -526,6 +550,7 @@ class StockerHomeView(
             setPadding(px(20f), px(16f), px(14f), px(16f))
         }
         card(verify) {
+            if (onScanner != null) { onScanner.invoke(); return@card }
             close()
             val available = state.data?.shelfAnalysis != null
             dialog = InfoCardDialog.show(activity, scale, str(R.string.dialog_shelf_guidance),
@@ -564,38 +589,44 @@ class StockerHomeView(
             orientation = LinearLayout.VERTICAL
             minimumHeight = px(111f)
             setPadding(px(24f), px(21f), px(20f), px(16f))
-            contentDescription = str(R.string.home_summary_accessibility, str(title), count)
+            contentDescription = if (destination == Tab.ALERTS && state.data?.isDemo == false) "${str(title)} $count em aberto"
+                else str(R.string.home_summary_accessibility, str(title), count)
         }
         card(column) { select(destination) }
         column.addView(label(str(title), 16f, secondary))
         val row = LinearLayout(context).apply { gravity = Gravity.CENTER_VERTICAL }
-        row.addView(label(count.toString(), 40f))
-        row.addView(label(str(R.string.home_week), 15f, secondary),
-            LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = px(10f) })
+        row.addView(label(count.toString(), 36f),LinearLayout.LayoutParams(0,-2,1f))
         row.addView(icon(R.drawable.home_summary_arrow), LinearLayout.LayoutParams(px(21f), px(18f)))
         column.addView(row, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(4f) })
+        column.addView(label(if (destination == Tab.ALERTS && state.data?.isDemo == false) "Em aberto" else "Nesta semana",12f,secondary),
+            LinearLayout.LayoutParams(-1,-2).apply { topMargin=px(6f) })
         return column
     }
 
     private fun events(values: List<HomeEvent>, empty: Int, firstGap: Float = 28f) {
-        if (values.isEmpty()) { add(label(str(empty), 16f, secondary), firstGap); return }
+        if (values.isEmpty()) {
+            add(UiKit(context).empty(R.drawable.home_check, "Tudo em dia por aqui", "Nenhuma pendência no momento. As próximas tarefas aparecerão aqui."), firstGap)
+            return
+        }
         values.forEachIndexed { index, event -> add(eventCard(event), if (index == 0) firstGap else 18f) }
     }
 
-    private fun eventTitle(event: HomeEvent): String = when (event.type) {
+    private fun eventTitle(event: HomeEvent): String = event.title ?: when (event.type) {
         HomeEventType.RESTOCK_REQUIRED -> resources.getQuantityString(R.plurals.home_restock_title, event.productCount, event.productCount)
         HomeEventType.LOW_STOCK -> resources.getQuantityString(R.plurals.home_low_stock_title, event.productCount, event.productCount)
         HomeEventType.ANALYSIS_COMPLETED -> str(if (tab == Tab.START) R.string.home_last_analysis else R.string.home_analysis_completed)
+        HomeEventType.RESTOCK_COMPLETED -> "Reposição concluída"
     }
 
     private fun relativeTime(time: Instant): String {
+        if (time == Instant.EPOCH) return "Data não informada"
         val minutes = Duration.between(time, Instant.now()).toMinutes().coerceAtLeast(0)
-        val date = time.atZone(ZoneId.systemDefault()).toLocalDate()
+        val date = time.atZone(ZoneId.of("America/Sao_Paulo")).toLocalDate()
         return when {
             minutes < 1 -> str(R.string.home_now)
             minutes < 60 -> str(R.string.home_minutes_ago, minutes)
-            date == LocalDate.now() -> str(R.string.home_hours_ago, minutes / 60)
-            date == LocalDate.now().minusDays(1) -> str(R.string.home_yesterday)
+            date == LocalDate.now(ZoneId.of("America/Sao_Paulo")) -> str(R.string.home_hours_ago, minutes / 60)
+            date == LocalDate.now(ZoneId.of("America/Sao_Paulo")).minusDays(1) -> str(R.string.home_yesterday)
             else -> date.format(DateTimeFormatter.ofPattern("dd/MM", locale))
         }
     }
@@ -610,13 +641,20 @@ class StockerHomeView(
             contentDescription = "$title. $subtitle"
         }
         card(row) {
+            if (state.data?.isDemo == false) {
+                val record = state.data?.restockingAlerts?.firstOrNull { it.id == event.id }
+                if (record != null && event.type in setOf(HomeEventType.RESTOCK_REQUIRED, HomeEventType.LOW_STOCK))
+                    showRestockingDetails(record, subtitle)
+                else showInfo(title, subtitle)
+                return@card
+            }
             showAnalysisInfo(title, subtitle, str(R.string.dialog_event_description),
                 state.data?.analysisFor(event))
         }
         val (colors, resource) = when (event.type) {
             HomeEventType.RESTOCK_REQUIRED -> intArrayOf(0xFFC73E36.toInt(), 0xFFE0382E.toInt()) to R.drawable.home_stop
             HomeEventType.LOW_STOCK -> intArrayOf(0xFFE0AB3D.toInt(), 0xFFE8A825.toInt()) to R.drawable.home_warning
-            HomeEventType.ANALYSIS_COMPLETED -> intArrayOf(0xFF096D3C.toInt(), 0xFF0A874A.toInt()) to R.drawable.home_check
+            HomeEventType.ANALYSIS_COMPLETED, HomeEventType.RESTOCK_COMPLETED -> intArrayOf(0xFF096D3C.toInt(), 0xFF0A874A.toInt()) to R.drawable.home_check
         }
         row.addView(FrameLayout(context).apply {
             background = GradientDrawable(if (event.type == HomeEventType.LOW_STOCK)
@@ -709,13 +747,15 @@ class StockerHomeView(
     private fun renderAlerts() {
         val data = state.data ?: return
         sectionLabel(str(R.string.restocking_pending), 24f)
-        if (data.restockingAlerts.isEmpty()) add(label(str(R.string.home_empty_alerts), 16f, secondary), 12f)
+        if (data.restockingAlerts.isEmpty()) add(UiKit(context).empty(R.drawable.home_bell,
+            "Tudo tranquilo nas gôndolas", "Não há alertas abertos. Quando algum produto precisar de atenção, você verá aqui."), 12f)
         data.restockingAlerts.forEach { add(productCard(it), 10f) }
         sectionLabel(str(R.string.restocking_recent), 16f)
-        val today = LocalDate.now()
+        val today = LocalDate.now(ZoneId.of("America/Sao_Paulo"))
         val completed = HistoryFilter(period = HistoryPeriod.TODAY)
-            .apply(data.restockingHistory, today, ZoneId.systemDefault())
-        if (completed.isEmpty()) add(label(str(R.string.restocking_empty_recent), 16f, secondary), 12f)
+            .apply(data.restockingHistory, today, ZoneId.of("America/Sao_Paulo"))
+        if (completed.isEmpty()) add(UiKit(context).empty(R.drawable.home_check,
+            "Seu dia está começando", "As reposições concluídas hoje aparecerão aqui, assim que forem registradas."), 12f)
         completed.take(2).forEach { add(productCard(it), 10f) }
     }
 
@@ -724,10 +764,12 @@ class StockerHomeView(
             RestockingStatus.REQUIRED -> Triple(color(R.color.home_danger), R.string.restocking_required, R.drawable.home_stop)
             RestockingStatus.LOW_STOCK -> Triple(color(R.color.home_caution), R.string.restocking_low, R.drawable.home_warning)
             RestockingStatus.COMPLETED -> Triple(color(R.color.home_success), R.string.restocking_done, R.drawable.home_check)
+            RestockingStatus.OBSERVED -> Triple(secondary, R.string.restocking_observed, R.drawable.home_camera)
         }
-        val date = record.occurredAt.atZone(ZoneId.systemDefault())
+        val date = record.occurredAt.atZone(ZoneId.of("America/Sao_Paulo"))
         val elapsed = Duration.between(record.occurredAt, Instant.now()).toMinutes()
-        val time = if (date.toLocalDate() == LocalDate.now() && elapsed in 0..59) relativeTime(record.occurredAt)
+        val time = if (record.occurredAt == Instant.EPOCH) "Data não informada"
+            else if (date.toLocalDate() == LocalDate.now(ZoneId.of("America/Sao_Paulo")) && elapsed in 0..59) relativeTime(record.occurredAt)
             else date.format(DateTimeFormatter.ofPattern("HH:mm", locale))
         val subtitle = str(R.string.home_event_subtitle, record.shelfCode, time)
         val row = LinearLayout(context).apply {
@@ -739,9 +781,9 @@ class StockerHomeView(
         }
         card(row) {
             if (selectable) {
-                if (!selectedProducts.add(record.id)) selectedProducts.remove(record.id)
-                render()
-            } else showAnalysisInfo(record.productName, subtitle, str(statusText), state.data?.analysisFor(record))
+                row.findViewWithTag<CheckBox>("select:${record.id}")?.let { it.isChecked = !it.isChecked }
+            } else if (state.data?.isDemo == false) showRestockingDetails(record, subtitle)
+            else showAnalysisInfo(record.productName, subtitle, str(statusText), state.data?.analysisFor(record))
         }
         val thumbnail = FrameLayout(context).apply {
             background = rounded(color(R.color.home_image_tile), 20f, true)
@@ -773,10 +815,11 @@ class StockerHomeView(
             RestockingStatus.REQUIRED -> intArrayOf(0xFFDE4138.toInt(), 0xFFE0382E.toInt())
             RestockingStatus.LOW_STOCK -> intArrayOf(0xFFE0AB3D.toInt(), 0xFFE8A825.toInt())
             RestockingStatus.COMPLETED -> intArrayOf(0xFF0C8449.toInt(), 0xFF0A874A.toInt())
+            RestockingStatus.OBSERVED -> intArrayOf(color(R.color.home_subtle_tile), color(R.color.home_subtle_tile))
         }
         if (selectable) row.addView(CheckBox(context).apply {
             id = View.generateViewId()
-            tag = record.id
+            tag = "select:${record.id}"
             contentDescription = str(R.string.analysis_select_product, record.productName)
             buttonTintList = ColorStateList.valueOf(color(R.color.home_active))
             isChecked = record.id in selectedProducts
@@ -785,7 +828,7 @@ class StockerHomeView(
             minimumHeight = (48 * density).toInt()
             setOnCheckedChangeListener { _, checked ->
                 if (checked) selectedProducts.add(record.id) else selectedProducts.remove(record.id)
-                findViewById<View>(R.id.analysis_start)?.isEnabled = selectedProducts.isNotEmpty() && !signingOut
+                updateStartAvailability()
             }
         }, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = px(10f) })
         else row.addView(FrameLayout(context).apply {
@@ -795,6 +838,14 @@ class StockerHomeView(
         return row
     }
 
+    private fun showRestockingDetails(record: RestockingRecord, subtitle: String) {
+        close()
+        val details = state.data?.analysisFor(record)
+        dialog = InfoCardDialog.show(activity, scale, record.productName,
+            if (record.status == RestockingStatus.COMPLETED) "Reposição concluída. Consulte os produtos e os dados registrados."
+            else "Confira os produtos e a situação desta gôndola.", subtitle,
+            primary = "Ver reposição", action = { openAnalysisResult(details?.id) }, actionEnabled = details != null)
+    }
     private fun openAnalysisResult(id: String? = state.data?.shelfAnalysis?.id) {
         if (signingOut || state.data?.analysis(id) == null) return
         close()
@@ -818,7 +869,9 @@ class StockerHomeView(
             return
         }
         val pending = analysis.products.any { it.status != RestockingStatus.COMPLETED }
-        selectedProducts.retainAll(analysis.products.filter { it.status != RestockingStatus.COMPLETED }.map { it.id }.toSet())
+        fun selectable(record: RestockingRecord) = record.status != RestockingStatus.COMPLETED &&
+            (state.data?.isDemo == true || record.productId != null)
+        selectedProducts.retainAll(analysis.products.filter(::selectable).map { it.id }.toSet())
         val shelf = LinearLayout(context).apply {
             minimumHeight = px(99f)
             gravity = Gravity.CENTER_VERTICAL
@@ -856,20 +909,36 @@ class StockerHomeView(
             analysis.products.count { it.status == RestockingStatus.REQUIRED }), 0xFFE0382E.toInt(), R.drawable.home_stop)
         summary(resources.getQuantityString(R.plurals.home_low_stock_title, analysis.products.count { it.status == RestockingStatus.LOW_STOCK },
             analysis.products.count { it.status == RestockingStatus.LOW_STOCK }), 0xFFE8A825.toInt(), R.drawable.home_warning)
-        summary(str(R.string.analysis_product_count, analysis.analyzedProducts), 0xFF0A874A.toInt(), R.drawable.home_check)
+        summary(if (analysis.fromPhoto) str(R.string.analysis_product_count, analysis.analyzedProducts)
+            else "${analysis.products.size} produtos nesta reposição", 0xFF0A874A.toInt(), R.drawable.home_check)
+        if (analysis.observations.isNotEmpty()) {
+            add(label("Observações da foto", 17f), 20f)
+            analysis.observations.forEach { add(label(it, 14f, secondary), 8f) }
+        }
         heading(if (pending) R.string.analysis_products else R.string.analysis_review_products, 20f)
-        analysis.products.forEach { add(productCard(it, selectable = it.status != RestockingStatus.COMPLETED), 10f) }
+        analysis.products.forEach { add(productCard(it, selectable = selectable(it)), 10f) }
         if (pending) {
             add(textButton(str(R.string.analysis_start)) {
-                showInfo(str(R.string.analysis_start), str(R.string.analysis_demo_only))
+                if (state.data?.isDemo == false && onRestock != null) {
+                    val selected = analysis.products.filter { it.id in selectedProducts && it.status != RestockingStatus.COMPLETED }
+                    if (selected.isNotEmpty()) onRestock.invoke(selected)
+                } else showInfo(str(R.string.analysis_start), str(R.string.analysis_demo_only))
             }.apply {
                 id = R.id.analysis_start
+                startAction = this
                 isEnabled = selectedProducts.isNotEmpty() && !signingOut
                 minimumHeight = px(59f)
                 background = rounded(color(R.color.home_button), 50f)
             }, 35f, 81f)
         }
         if (state.data?.isDemo == true) add(label(str(R.string.home_demo), 12f, secondary).apply { gravity = Gravity.CENTER }, 16f)
+    }
+
+    private fun updateStartAvailability() {
+        startAction?.apply {
+            isEnabled = selectedProducts.isNotEmpty() && !signingOut
+            alpha = if (isEnabled) 1f else .55f
+        }
     }
 
     private fun renderHistory() {
@@ -950,17 +1019,21 @@ class StockerHomeView(
             periodLabels()[historyFilter.period.ordinal], historyFilter.shelfCode ?: str(R.string.history_all_shelves),
             str(if (historyFilter.oldestFirst) R.string.history_oldest else R.string.history_newest)), 12f, secondary),
             LinearLayout.LayoutParams(-1, -2).apply { setMargins(px(25f), px(12f), px(19f), 0) })
-        val records = historyFilter.apply(state.data?.restockingHistory.orEmpty(), LocalDate.now(), ZoneId.systemDefault())
+        val records = historyFilter.apply(state.data?.restockingHistory.orEmpty(), LocalDate.now(ZoneId.of("America/Sao_Paulo")), ZoneId.of("America/Sao_Paulo"))
         container.contentDescription = resources.getQuantityString(R.plurals.history_result_count, records.size, records.size)
         if (records.isEmpty()) {
-            container.addView(label(str(if (historyFilter == HistoryFilter()) R.string.history_empty else R.string.history_no_results),
-                16f, secondary), LinearLayout.LayoutParams(-1, -2).apply { setMargins(px(25f), px(24f), px(19f), 0) })
+            val unfiltered = historyFilter == HistoryFilter()
+            container.addView(UiKit(context).empty(R.drawable.home_clock,
+                if (unfiltered) "Sua jornada começa aqui" else "Nenhuma reposição encontrada",
+                if (unfiltered) "Suas reposições registradas ficam organizadas aqui para você acompanhar cada etapa."
+                else "Experimente outro período ou ajuste a busca para encontrar o que procura."),
+                LinearLayout.LayoutParams(-1, -2).apply { setMargins(px(25f), px(24f), px(19f), 0) })
             return
         }
-        records.groupBy { it.occurredAt.atZone(ZoneId.systemDefault()).toLocalDate() }.forEach { (date, group) ->
+        records.groupBy { it.occurredAt.atZone(ZoneId.of("America/Sao_Paulo")).toLocalDate() }.forEach { (date, group) ->
             val title = when (date) {
-                LocalDate.now() -> str(R.string.history_today)
-                LocalDate.now().minusDays(1) -> str(R.string.home_yesterday)
+                LocalDate.now(ZoneId.of("America/Sao_Paulo")) -> str(R.string.history_today)
+                LocalDate.now(ZoneId.of("America/Sao_Paulo")).minusDays(1) -> str(R.string.home_yesterday)
                 else -> date.format(DateTimeFormatter.ofPattern("dd/MM/yyyy", locale))
             }
             sectionLabel(title, 16f, container)
@@ -1054,6 +1127,7 @@ class StockerHomeView(
     }
 
     private fun openSettings(destination: SettingsDestination) {
+        if (destination == SettingsDestination.SUPPORT && onChat != null) { onChat.invoke(); return }
         if (signingOut || tab != Tab.CONFIG) return
         close()
         settingsDestination = destination

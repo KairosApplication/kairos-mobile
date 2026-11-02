@@ -9,6 +9,8 @@ interface AuthRepository {
     fun completeProfile(details: ProfileDetails): SignedInUser
     fun requestPasswordReset(email: String)
     fun logout()
+    fun linkBusinessAccount(password: String): SignedInUser = error("Vínculo indisponível.")
+    fun registerCustomer(): SignedInUser = error("Cadastro indisponível.")
     fun updateName(uid: String, name: String, lastName: String): SignedInUser = error("Operação indisponível.")
     fun requestEmailChange(uid: String, email: String, currentPassword: String): SignedInUser = error("Operação indisponível.")
     fun changePassword(uid: String, currentPassword: String, newPassword: String): SignedInUser = error("Operação indisponível.")

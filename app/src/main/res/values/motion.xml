@@ -1,0 +1,6 @@
+<resources>
+    <style name="KairosDialogMotion">
+        <item name="android:windowEnterAnimation">@anim/kairos_screen_enter</item>
+        <item name="android:windowExitAnimation">@anim/kairos_screen_exit</item>
+    </style>
+</resources>

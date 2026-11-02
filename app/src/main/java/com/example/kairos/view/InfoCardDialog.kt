@@ -17,6 +17,35 @@ import com.example.kairos.view.settings.AccountUiStyle
 
 /** Shared, flat dialog surface and actions for guidance, alerts and filters. */
 internal object InfoCardDialog {
+    fun confirm(activity: AppCompatActivity, title: String, message: String,
+                primary: String, secondary: String, icon: Int = R.drawable.home_check,
+                details: String? = null, action: () -> Unit): AlertDialog {
+        val ui=UiKit(activity)
+        val content=panel(activity,1f)
+        content.addView(android.widget.FrameLayout(activity).apply {
+            background=ui.shape(R.color.home_subtle_tile,18)
+            addView(android.widget.ImageView(activity).apply {
+                setImageResource(icon)
+                imageTintList=ColorStateList.valueOf(ui.color(R.color.home_icon_accent))
+                importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            },android.widget.FrameLayout.LayoutParams(ui.dp(26),ui.dp(26),Gravity.CENTER))
+        },LinearLayout.LayoutParams(ui.dp(56),ui.dp(56)))
+        content.addView(ui.text(title,22f,true).apply { ViewCompat.setAccessibilityHeading(this,true) },
+            LinearLayout.LayoutParams(-1,-2).apply { topMargin=ui.dp(20) })
+        content.addView(ui.text(message,14f,muted=true),
+            LinearLayout.LayoutParams(-1,-2).apply { topMargin=ui.dp(10) })
+        if(!details.isNullOrBlank()) content.addView(ui.text(details,14f).apply {
+            background=ui.shape(R.color.home_subtle_tile,16)
+            setPadding(ui.dp(16),ui.dp(16),ui.dp(16),ui.dp(16))
+        },LinearLayout.LayoutParams(-1,-2).apply { topMargin=ui.dp(18) })
+        lateinit var dialog: AlertDialog
+        content.addView(ui.button(primary,true) { dialog.dismiss();action() },
+            LinearLayout.LayoutParams(-1,-2).apply { topMargin=ui.dp(24) })
+        content.addView(ui.button(secondary) { dialog.dismiss() },
+            LinearLayout.LayoutParams(-1,-2).apply { topMargin=ui.dp(10) })
+        dialog=present(activity,1f,content)
+        return dialog
+    }
     fun panel(activity: AppCompatActivity, scale: Float) = LinearLayout(activity).apply {
         val s = AccountUiStyle(activity, scale)
         orientation = LinearLayout.VERTICAL
@@ -46,9 +75,10 @@ internal object InfoCardDialog {
             outlineProvider = null
             backgroundTintList = null
             ViewCompat.setBackgroundTintList(this, null)
-            val shape = s.rounded(if (filled) activity.getColor(R.color.home_button) else Color.TRANSPARENT, 14f)
-            background = RippleDrawable(ColorStateList.valueOf(0x228CD9B8), shape, s.rounded(Color.WHITE, 14f))
-            setTextColor(activity.getColor(if (filled) R.color.home_button_text else R.color.home_icon_accent))
+            val shape = s.rounded(if (filled) activity.getColor(R.color.home_button) else s.surface, 16f,
+                if(filled) null else activity.getColor(R.color.home_border))
+            background = RippleDrawable(ColorStateList.valueOf(0x228CD9B8), shape, s.rounded(Color.WHITE, 16f))
+            setTextColor(activity.getColor(if (filled) R.color.home_button_text else R.color.home_ink))
         }
 
     fun present(activity: AppCompatActivity, scale: Float, content: LinearLayout): AlertDialog {
@@ -58,7 +88,9 @@ internal object InfoCardDialog {
             addView(content)
         }).create()
         dialog.show()
+        UiMotion.reveal(content)
         dialog.window?.apply {
+            if (android.animation.ValueAnimator.areAnimatorsEnabled()) setWindowAnimations(R.style.KairosDialogMotion)
             setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
             decorView.elevation = 0f
             decorView.translationZ = 0f

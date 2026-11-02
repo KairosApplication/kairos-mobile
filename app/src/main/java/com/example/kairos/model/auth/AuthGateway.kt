@@ -1,7 +1,7 @@
 package com.example.kairos.model.auth
 
 /** Adaptadores bloqueantes: executar somente no executor do ViewModel. */
-data class AuthIdentity(val uid: String, val email: String)
+data class AuthIdentity(val uid: String, val email: String, val emailVerified: Boolean = true)
 
 interface AuthGateway {
     fun create(email: String, password: String): AuthIdentity

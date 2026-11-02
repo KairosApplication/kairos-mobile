@@ -1,5 +1,7 @@
 # Ajustes do repositor
 
+> Atualização: Suporte abre o chat pessoal real e o resumo de Perfil vem do servidor. Configuração e validações em [service-integration.md](service-integration.md).
+
 A página principal segue o frame [Tela-Config, 713:1826](https://www.figma.com/design/OFMvU7yImxJFUpV7e061Pj?node-id=713-1826).
 O título é Ajustes; a aba continua identificada como Ajustes.
 
