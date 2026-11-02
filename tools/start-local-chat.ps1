@@ -3,7 +3,7 @@ $runtime=Join-Path (Split-Path $PSScriptRoot -Parent) '.integration'
 $providerFile=Join-Path $runtime 'secrets/groq.env'
 if(Test-Path -LiteralPath $providerFile) {
     foreach($line in Get-Content -LiteralPath $providerFile) {
-        if($line -match '^(GROQ_API_KEY|LLM_PROVIDER|LLM_MAX_TOKENS|MAX_TENTATIVAS_JUIZ|GROQ_MODEL|GROQ_FAST_MODEL)=(.*)$') {
+        if($line -match '^(GROQ_API_KEY|LLM_PROVIDER|LLM_MAX_TOKENS|MAX_TENTATIVAS_JUIZ|GROQ_MODEL|GROQ_FAST_MODEL|VISION_PROVIDER|GROQ_VISION_MODEL)=(.*)$') {
             [Environment]::SetEnvironmentVariable($Matches[1],$Matches[2],'Process')
         }
     }

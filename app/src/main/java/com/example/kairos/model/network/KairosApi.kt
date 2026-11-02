@@ -23,9 +23,12 @@ object ApiOrigin {
     }
 }
 
-class ApiFailure(val status: Int, code: String? = null) : Exception(if (code == "AI_NOT_CONFIGURED")
-    "As respostas de IA ainda não estão ativadas. Você já pode criar e consultar suas conversas."
-    else when (status) {
+class ApiFailure(val status: Int, code: String? = null) : Exception(when (code) {
+    "AI_NOT_CONFIGURED" -> "As respostas de IA ainda não estão ativadas. Você já pode criar e consultar suas conversas."
+    "VISION_NOT_CONFIGURED" -> "A análise de fotos ainda não foi ativada no servidor. Seu login continua válido."
+    "VISION_PROVIDER_UNAVAILABLE" -> "O serviço de análise de fotos não respondeu. Tente novamente em instantes."
+    "VISION_INVALID_RESPONSE" -> "Não foi possível interpretar a análise. Tente uma foto mais próxima e nítida."
+    else -> when (status) {
     401 -> "Sessão expirada ou revogada. Entre novamente."
     403 -> "Sua conta não tem autorização para esta operação."
     404 -> "O recurso não está disponível para sua conta."
@@ -35,7 +38,7 @@ class ApiFailure(val status: Int, code: String? = null) : Exception(if (code == 
     429 -> "Limite de solicitações atingido. Aguarde e tente novamente."
     502, 503, 504 -> "Não conseguimos acessar o servidor agora. Tente novamente em instantes."
     else -> "Não foi possível concluir a solicitação no servidor. Tente novamente."
-})
+}})
 
 interface IdentityTokenSource {
     fun uid(): String?
@@ -53,6 +56,9 @@ class FirebaseTokens(private val auth: FirebaseAuth) : IdentityTokenSource {
 /** No cookie jar, redirects, disk cache, body logging or automatic retry of mutations. */
 class KairosApi(private val base: String, private val tokens: IdentityTokenSource) {
     fun request(uid: String, path: String, method: String = "GET", payload: JSONObject? = null): String {
+        return requestAttempt(uid, path, method, payload, false)
+    }
+    private fun requestAttempt(uid: String, path: String, method: String, payload: JSONObject?, refreshed: Boolean): String {
         ApiOrigin.validate(base, BuildConfig.DEBUG)
         require(path.startsWith("/api/v1/") && !path.contains(".."))
         fun owner() { if (tokens.uid() != uid) throw AccountChangedException() }
@@ -76,12 +82,20 @@ class KairosApi(private val base: String, private val tokens: IdentityTokenSourc
             }
             val status = connection.responseCode
             owner()
+            if (status == 401 && method == "GET" && !refreshed) {
+                connection.disconnect()
+                tokens.token(uid, true)
+                owner()
+                return requestAttempt(uid, path, method, payload, true)
+            }
             if (status !in 200..299) {
                 val code = if (status == 503) runCatching {
                     connection.errorStream?.use { stream ->
                         val bytes = ByteArray(2048)
                         val count = stream.read(bytes)
-                        if (count > 0) JSONObject(String(bytes, 0, count, Charsets.UTF_8)).optString("code") else null
+                        if (count > 0) JSONObject(String(bytes, 0, count, Charsets.UTF_8)).let {
+                            it.optJSONObject("detail")?.optString("code") ?: it.optString("code")
+                        } else null
                     }
                 }.getOrNull() else null
                 throw ApiFailure(status, code)

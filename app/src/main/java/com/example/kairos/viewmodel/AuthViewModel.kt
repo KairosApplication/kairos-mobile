@@ -76,7 +76,12 @@ class AuthViewModel(private val repository: AuthRepository?) : ViewModel() {
             } catch (e: AccountChangedException) {
                 AuthUiState(message = e.message.orEmpty())
             } catch (e: com.example.kairos.model.network.ApiFailure) {
-                if (e.status == 401) { repository?.logout(); AuthUiState(message = e.message.orEmpty()) }
+                if (e.status == 401 && previous.user != null) {
+                    previous.copy(screen = AuthScreen.BUSINESS_ACCESS,
+                        user = previous.user.copy(business = null, businessIssue = "Vamos verificar novamente sua conexão com o mercado."),
+                        message = "Vamos verificar novamente sua conexão com o mercado.")
+                }
+                else if (e.status == 401) AuthUiState(message = e.message.orEmpty())
                 else previous.copy(message = e.message.orEmpty())
             } catch (e: ProfileIncompleteException) {
                 authenticated(e.user).copy(message = e.message.orEmpty() + "\n" +
@@ -117,6 +122,14 @@ class AuthViewModel(private val repository: AuthRepository?) : ViewModel() {
     }
 
     fun reloadSession() = run { authenticated(it.restoreSession() ?: throw AccountChangedException()) }
+
+    fun businessAccessInterrupted() {
+        val previous = mutableState.value ?: return
+        val user = previous.user ?: return
+        val notice = "Não conseguimos confirmar o acesso ao mercado. Toque abaixo para verificar novamente."
+        mutableState.value = previous.copy(screen = AuthScreen.BUSINESS_ACCESS, loading = false,
+            user = user.copy(business = null, businessIssue = notice), message = notice)
+    }
 
     fun linkBusiness(password: String) = run { authenticated(it.linkBusinessAccount(password)) }
     fun registerCustomer() = run { authenticated(it.registerCustomer()) }

@@ -53,8 +53,8 @@ class FirebaseAuthRepository(
                 businessIssue = error.message
                 null
             } catch (error: com.example.kairos.model.network.ApiFailure) {
-                if (error.status == 401) throw error
-                businessIssue = if (error.status == 403) "Seu acesso ao mercado não foi autorizado. Confira o vínculo da sua conta."
+                businessIssue = if (error.status == 401) "Sua sessão do mercado precisa ser verificada novamente. Seu login foi preservado."
+                    else if (error.status == 403) "Seu acesso ao mercado não foi autorizado. Confira o vínculo da sua conta."
                     else "Você entrou, mas os serviços do mercado não estão disponíveis. Tente novamente mais tarde."
                 null
             }

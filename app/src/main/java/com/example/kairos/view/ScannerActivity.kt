@@ -228,7 +228,7 @@ class ScannerActivity : AppCompatActivity() {
                 "Um novo olhar para o estoque", "Escolha a gôndola, enquadre os produtos e tire uma foto nítida para começar."),
                 LinearLayout.LayoutParams(-1, -2).apply { topMargin = ui.dp(12); bottomMargin = ui.dp(12) })
             choices("Gôndola", catalog.shelves, state.shelfId, vm::shelf)
-            body.addView(label("A imagem será analisada pelo Gemini, sem armazenamento permanente no Kairos. Confira os resultados antes de registrar a reposição."))
+            body.addView(label("A imagem será enviada ao Groq para análise, sem armazenamento permanente no Kairos. Confira os resultados antes de registrar a reposição."))
             if (state.photo != null) {
                 val bitmap = BitmapFactory.decodeFile(state.photo.path, BitmapFactory.Options().apply { inSampleSize = 8 })
                 body.addView(ImageView(this).apply { setImageBitmap(bitmap); adjustViewBounds = true },

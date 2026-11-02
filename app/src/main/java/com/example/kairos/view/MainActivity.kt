@@ -114,7 +114,10 @@ class MainActivity : AppCompatActivity() {
         homeView.restore(savedInstanceState?.getBundle("home"))
         homeVm.state.observe(this) {
             homeView.bind(it)
-            if (it.httpStatus == 401) vm.logout()
+            if (it.httpStatus == 401 || it.httpStatus == 403) {
+                homeVm.reset()
+                vm.businessAccessInterrupted()
+            }
         }
         vm.state.observe(this) { state ->
             val scope = state.user?.let { "${it.uid}:${it.business?.userId}:${it.business?.employeeId}:${it.business?.companyId}:${it.business?.role}" }
@@ -371,6 +374,10 @@ class MainActivity : AppCompatActivity() {
         form.removeAllViews()
         fields.clear()
         controls.clear()
+        if (state.screen == AuthScreen.BUSINESS_ACCESS) {
+            renderBusinessAccess(state)
+            return
+        }
         form.addView(TextView(this).apply {
             text = "Kairos — cadastro e acesso"
         })
@@ -415,28 +422,63 @@ class MainActivity : AppCompatActivity() {
                 field("email", "Email cadastrado", emailType)
                 button("Enviar link de recuperação") { vm.requestResetLink(value("email").trim()) }
             }
-            AuthScreen.BUSINESS_ACCESS -> {
-                val linked = state.user?.business?.userId != null
-                val serviceUnavailable = state.user?.businessIssue != null
-                form.addView(TextView(this).apply { text = if (serviceUnavailable)
-                    "Login realizado. A conexão com o mercado está pendente; os dados de estoque e a IA estarão disponíveis quando os serviços forem configurados."
-                    else if (linked)
-                    "Seu cargo não permite acessar a área de reposição. Solicite ao gestor o acesso adequado."
-                    else "Vincule sua conta Kairos existente com a senha do cadastro PostgreSQL. Se ainda não possui vínculo empresarial, solicite ao gestor o provisionamento da conta." })
-                if (!linked && !serviceUnavailable) {
-                    field("password", "Senha da conta Kairos", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD)
-                    button("Vincular conta existente") { val password = value("password"); fields["password"]?.text?.clear(); vm.linkBusiness(password) }
-                    button("Criar cadastro de cliente") { vm.registerCustomer() }
-                }
-                button("Verificar acesso novamente") { vm.reloadSession() }
-                if (linked) button("Conversar com o suporte IA") {
-                    chatDialog?.close(); chatDialog = ChatDialog(this, chatVm).also { it.show() }
-                }
-            }
+            AuthScreen.BUSINESS_ACCESS -> Unit // Rendered by the dedicated access screen.
             AuthScreen.HOME -> Unit // Rendered by StockerHomeView.
         }
         if (state.screen !in listOf(AuthScreen.LOGIN, AuthScreen.HOME)) {
             button("Voltar ao login") { vm.navigate(AuthScreen.LOGIN) }
         }
+    }
+
+    private fun renderBusinessAccess(state: AuthUiState) {
+        val ui = UiKit(this)
+        formScroll.isFillViewport = true
+        formScroll.setBackgroundColor(ui.color(R.color.home_background_middle))
+        form.setPadding(ui.dp(24), ui.dp(32), ui.dp(24), ui.dp(28))
+        form.addView(ui.text("KAIROS  ·  SEU MERCADO", 11f, strong = true, muted = true))
+        form.addView(ui.text("Vamos conectar\nvocê ao mercado", 29f, strong = true),
+            LinearLayout.LayoutParams(-1, -2).apply { topMargin = ui.dp(24); bottomMargin = ui.dp(12) })
+        val linked = state.user?.business?.userId != null
+        val unavailable = state.user?.businessIssue != null
+        form.addView(ui.empty(R.drawable.home_house,
+            if (unavailable) "Vamos conferir sua conexão" else if (linked) "Confira seu perfil de acesso" else "Encontre seu lugar no Kairos",
+            if (unavailable) "Seu login foi mantido. Precisamos confirmar a conexão e o acesso aos dados do mercado."
+            else if (linked) "Sua conta está vinculada, mas o perfil atual não libera a área de reposição."
+            else "Para começar, sua conta precisa estar vinculada ao mercado. Se precisar, peça ajuda ao responsável."))
+        form.addView(ui.text(state.user?.email.orEmpty(), 13f, muted = true).apply {
+            gravity = android.view.Gravity.CENTER
+        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = ui.dp(16); bottomMargin = ui.dp(12) })
+        message = ui.text(state.message, 13f, muted = true).apply {
+            accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
+        }
+        form.addView(message)
+        progress = ProgressBar(this)
+        form.addView(progress, LinearLayout.LayoutParams(ui.dp(28), ui.dp(28)).apply {
+            gravity = android.view.Gravity.CENTER_HORIZONTAL; topMargin = ui.dp(12)
+        })
+        fun action(label: String, primary: Boolean = false, action: () -> Unit) {
+            val button = ui.button(label, primary, action)
+            controls.add(button)
+            form.addView(button, LinearLayout.LayoutParams(-1, -2).apply { topMargin = ui.dp(12) })
+        }
+        action("Verificar acesso novamente", true) { vm.reloadSession() }
+        if (!linked && !unavailable) {
+            form.addView(ui.text("Já tem cadastro no mercado?", 15f, strong = true),
+                LinearLayout.LayoutParams(-1, -2).apply { topMargin = ui.dp(24) })
+            val password = EditText(this).apply {
+                hint = "Senha da conta do mercado"; textSize = 14f; typeface = ui.text("").typeface
+                inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+                isSaveEnabled = false; background = ui.shape(border = true)
+                setTextColor(ui.color(R.color.home_ink)); setHintTextColor(ui.color(R.color.home_secondary))
+                setPadding(ui.dp(16), ui.dp(16), ui.dp(16), ui.dp(16))
+            }
+            fields["password"] = password; controls.add(password); form.addView(password)
+            action("Vincular minha conta") { val value = password.text.toString(); password.text.clear(); vm.linkBusiness(value) }
+            action("Cadastrar como cliente") { vm.registerCustomer() }
+        }
+        if (linked) action("Abrir assistente Kairos") {
+            chatDialog?.close(); chatDialog = ChatDialog(this, chatVm).also { it.show() }
+        }
+        action("Usar outra conta") { vm.logout() }
     }
 }

@@ -46,8 +46,11 @@ class BusinessAvailabilityTest {
         }
     }
 
-    @Test fun rejectedIdentityTokenStillFailsAuthentication() {
-        try { repository(ApiFailure(401)).login("ana@example.com", "test-password"); fail() }
-        catch (error: ApiFailure) { assertEquals(401, error.status) }
+    @Test fun rejectedBusinessTokenPreservesFirebaseLoginWithoutGrantingAccess() {
+        val user = repository(ApiFailure(401)).login("ana@example.com", "test-password")
+        assertEquals("firebase-user", user.uid)
+        assertNull(user.business)
+        assertNotNull(user.profile)
+        assertTrue(user.businessIssue!!.contains("verificada"))
     }
 }
