@@ -43,13 +43,24 @@ class FirebaseAuthRepository(
             check(profile.uid == identity.uid) { "Perfil não corresponde à sessão." }
         }
         assertOwner(identity.uid)
+        var businessIssue: String? = null
         val scope = if (business != null) {
             auth.refreshToken()
             assertOwner(identity.uid)
-            business.session(identity.uid)
+            try {
+                business.session(identity.uid)
+            } catch (error: com.example.kairos.model.network.ServiceConfigurationException) {
+                businessIssue = error.message
+                null
+            } catch (error: com.example.kairos.model.network.ApiFailure) {
+                if (error.status == 401) throw error
+                businessIssue = if (error.status == 403) "Seu acesso ao mercado não foi autorizado. Confira o vínculo da sua conta."
+                    else "Você entrou, mas os serviços do mercado não estão disponíveis. Tente novamente mais tarde."
+                null
+            }
         } else null
         assertOwner(identity.uid)
-        return SignedInUser(identity.uid, identity.email, profile, identity.emailVerified, scope)
+        return SignedInUser(identity.uid, identity.email, profile, identity.emailVerified, scope, businessIssue)
     }
 
     override fun completeProfile(details: ProfileDetails): SignedInUser {

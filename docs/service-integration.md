@@ -2,6 +2,8 @@
 
 > Ajuste solicitado pelo responsável: cadastro, login, vínculo e chatbot não exigem confirmação de e-mail. O envio automático e a tela de verificação foram removidos. Essa decisão substitui as referências anteriores a e-mail verificado neste relatório. A autenticação por token e o vínculo PostgreSQL continuam obrigatórios.
 
+> Login e disponibilidade dos serviços foram separados: configuração ausente, 403 ou indisponibilidade do servidor preservam a identidade Firebase e mostram a tela de acesso empresarial com aviso. Isso não concede cargo, empresa, Home operacional ou dados fictícios. Tokens rejeitados com 401 continuam invalidando o acesso. Os endereços dos serviços ainda precisam ser fornecidos/configurados para usar estoque e IA reais.
+
 Entrega local em 01/11/2026. Os serviços precisam ser configurados e implantados em conjunto antes do uso real. Nenhum banco remoto foi alterado e nenhuma credencial de IA foi utilizada.
 
 ## Revisão e bases
@@ -143,7 +145,7 @@ Use terminação TLS e limites de corpo/concorrência também no gateway antes d
 
 ## Validação e limites da entrega
 
-- Kotlin: 41 testes unitários aprovados. Builds debug e release aprovados; lint debug aprovado com 92 avisos, sem novos erros; lint vital release sem erros. Relatórios Gradle locais preservados. A tarefa testReleaseUnitTest não existe na configuração AGP deste projeto; a tentativa foi rejeitada antes de executar e não conta como teste aprovado.
+- Kotlin: 45 testes unitários aprovados após separar autenticação e disponibilidade empresarial; build debug repetido e aprovado. O build release e lint anteriores foram aprovados; lint debug teve 92 avisos, sem novos erros, e lint vital release não teve erros. Relatórios Gradle locais preservados. A tarefa testReleaseUnitTest não existe na configuração AGP deste projeto; a tentativa foi rejeitada antes de executar e não conta como teste aprovado.
 - Java: suíte de 251 casos contabilizados após acrescentar o histórico Firebase; 240 aprovados e 11 pulados por dependerem de infraestrutura opcional. Checkstyle aprovado. Há dez testes novos de integração mobile em H2.
 - Python: 135 testes aprovados, incluindo dezoito novos de identidade/visão, sem acesso a provedores ou bancos reais.
 - Android 14 físico: cinco testes instrumentados aprovados em `com.example.kairos.integration`, com repositórios falsos e sem Firebase real. Um teste visual foi repetido após o ajuste da fonte. A instalação normal foi recusada por assinatura diferente; a instalação existente foi preservada.

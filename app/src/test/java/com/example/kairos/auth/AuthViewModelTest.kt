@@ -59,6 +59,12 @@ class AuthViewModelTest {
         verifyRestoration(SignedInUser("restored", "test@example.com", null), AuthScreen.COMPLETE_PROFILE)
     }
 
+    @Test fun authenticatedUserWithoutConfiguredBusinessServicesSeesAccessScreenInsteadOfLoginOrHome() {
+        verifyRestoration(SignedInUser("restored", "test@example.com", UserProfile(
+            "restored", "Test", "User", LocalDate.of(2000, 1, 1), "", "test@example.com", "", "public"
+        ), businessIssue = "Você entrou, mas a conexão com o mercado está pendente."), AuthScreen.BUSINESS_ACCESS)
+    }
+
     @Test fun missingSessionOffersOnboardingOnlyAfterRestorationFinishes() {
         verifyRestoration(null, AuthScreen.LOGIN)
     }

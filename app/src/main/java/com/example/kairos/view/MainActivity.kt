@@ -417,10 +417,13 @@ class MainActivity : AppCompatActivity() {
             }
             AuthScreen.BUSINESS_ACCESS -> {
                 val linked = state.user?.business?.userId != null
-                form.addView(TextView(this).apply { text = if (linked)
+                val serviceUnavailable = state.user?.businessIssue != null
+                form.addView(TextView(this).apply { text = if (serviceUnavailable)
+                    "Login realizado. A conexão com o mercado está pendente; os dados de estoque e a IA estarão disponíveis quando os serviços forem configurados."
+                    else if (linked)
                     "Seu cargo não permite acessar a área de reposição. Solicite ao gestor o acesso adequado."
                     else "Vincule sua conta Kairos existente com a senha do cadastro PostgreSQL. Se ainda não possui vínculo empresarial, solicite ao gestor o provisionamento da conta." })
-                if (!linked) {
+                if (!linked && !serviceUnavailable) {
                     field("password", "Senha da conta Kairos", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD)
                     button("Vincular conta existente") { val password = value("password"); fields["password"]?.text?.clear(); vm.linkBusiness(password) }
                     button("Criar cadastro de cliente") { vm.registerCustomer() }

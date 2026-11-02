@@ -43,7 +43,7 @@ class AuthViewModel(private val repository: AuthRepository?) : ViewModel() {
             else -> AuthScreen.HOME
         },
         user = user,
-        message = if (user.profile == null) "Complete os dados para concluir seu cadastro." else ""
+        message = if (user.profile == null) "Complete os dados para concluir seu cadastro." else user.businessIssue.orEmpty()
     )
 
     fun navigate(screen: AuthScreen) {

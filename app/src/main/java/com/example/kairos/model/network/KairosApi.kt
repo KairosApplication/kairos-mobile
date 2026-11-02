@@ -10,6 +10,8 @@ import java.net.HttpURLConnection
 import java.net.URI
 import java.util.concurrent.TimeUnit
 
+class ServiceConfigurationException : IllegalArgumentException("Você entrou, mas a conexão com os serviços do mercado ainda não foi configurada.")
+
 class ApiFailure(val status: Int) : Exception(when (status) {
     401 -> "Sessão expirada ou revogada. Entre novamente."
     403 -> "Sua conta não tem autorização para esta operação."
@@ -38,10 +40,8 @@ class FirebaseTokens(private val auth: FirebaseAuth) : IdentityTokenSource {
 class KairosApi(private val base: String, private val tokens: IdentityTokenSource) {
     fun request(uid: String, path: String, method: String = "GET", payload: JSONObject? = null): String {
         val origin = runCatching { URI(base) }.getOrNull()
-        require(origin?.scheme == "https" && !origin.host.isNullOrBlank() && origin.userInfo == null &&
-            origin.query == null && origin.fragment == null && origin.path.orEmpty() in setOf("", "/")) {
-            "Configure uma origem HTTPS para os serviços Kairos."
-        }
+        if (!(origin?.scheme == "https" && !origin.host.isNullOrBlank() && origin.userInfo == null &&
+            origin.query == null && origin.fragment == null && origin.path.orEmpty() in setOf("", "/"))) throw ServiceConfigurationException()
         require(path.startsWith("/api/v1/") && !path.contains(".."))
         fun owner() { if (tokens.uid() != uid) throw AccountChangedException() }
         owner()
