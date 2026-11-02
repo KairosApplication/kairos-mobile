@@ -71,7 +71,10 @@ class ScannerActivity : AppCompatActivity() {
         }
         setContentView(ScrollView(this).apply { isFillViewport = true; addView(body) })
         vm.state.observe(this, ::render)
-        vm.account(owner!!)
+        val initialShelf = intent.getLongExtra("restockShelfId", 0).takeIf { it > 0 }
+        val initialProduct = intent.getLongExtra("restockProductId", 0).takeIf { it > 0 }
+        if (savedInstanceState == null && initialShelf != null) productId = initialProduct
+        vm.account(owner!!, initialShelf, initialProduct)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -180,7 +183,7 @@ class ScannerActivity : AppCompatActivity() {
             state.loading && state.step == ScannerStep.RESULT -> "Registrando reposição…"
             state.loading && state.step == ScannerStep.PREVIEW -> "Analisando gôndola…"
             state.step == ScannerStep.COMPLETE -> "Reposição concluída"
-            state.step == ScannerStep.RESULT -> "Confira a análise"
+            state.step == ScannerStep.RESULT -> if (state.manualEntry) "Preparar reposição" else "Confira a análise"
             state.step == ScannerStep.IN_PROGRESS -> "Reposição em andamento"
             state.step == ScannerStep.CONFIRMING -> "Confirmar reposição"
             state.step == ScannerStep.PREVIEW -> "Confira a foto"
@@ -238,19 +241,20 @@ class ScannerActivity : AppCompatActivity() {
             } else button("Abrir câmera", state.shelfId != null) { takePhoto() }
         } else if (state.step == ScannerStep.RESULT) {
             state.result?.warnings?.forEach { body.addView(label(it)) }
-            if (state.result?.observations.isNullOrEmpty()) body.addView(label("Nenhum produto reconhecido. Repita a foto ou selecione manualmente um produto do catálogo."))
+            if (!state.manualEntry && state.result?.observations.isNullOrEmpty()) body.addView(label("Nenhum produto reconhecido. Repita a foto ou selecione manualmente um produto do catálogo."))
             state.result?.observations?.forEach { observation ->
                 body.addView(label("${observation.name} ${observation.brand}\nConfiança: ${observation.confidence}. " +
                     "Quantidade visível estimada: ${observation.visibleQuantity?.toString() ?: "incerta"}. " +
                     if (observation.unrecognized || observation.candidates.isEmpty()) "Identificação não confirmada." else "Confira o produto no catálogo."))
             }
-            body.addView(label("A foto não determina o saldo de estoque. Confirme um produto por operação; informe o total retirado do estoque e as avarias incluídas nesse total."))
+            body.addView(label(if (state.manualEntry) "Gôndola ${state.shelfId}. Confira o produto, escolha o estoque de origem e informe as quantidades. O saldo só muda na confirmação final."
+                else "A foto não determina o saldo de estoque. Confirme um produto por operação; informe o total retirado do estoque e as avarias incluídas nesse total."))
             val pending = state.pending
             if (pending != null) {
                 body.addView(label("A confirmação anterior pode ter sido recebida. A nova tentativa usará o mesmo identificador para impedir movimentação duplicada."))
                 button("Tentar a mesma confirmação novamente") { vm.confirm(pending) }
             } else {
-                button("Fotografar novamente") { takePhoto() }
+                button(if (state.manualEntry) "Analisar uma foto (opcional)" else "Fotografar novamente") { takePhoto() }
                 choices("Produto confirmado", catalog.products, productId) { productId = it }
                 choices("Estoque de origem", catalog.inventories, inventoryId) { inventoryId = it }
                 number("Quantidade retirada do estoque", quantity) { quantity = it }

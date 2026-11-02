@@ -64,7 +64,8 @@ class StockerHomeView(
     private val onLogout: () -> Unit,
     private val onAccountEdit: ((AccountEditRequest) -> Unit)? = null,
     private val onChat: (() -> Unit)? = null,
-    private val onScanner: (() -> Unit)? = null
+    private val onScanner: (() -> Unit)? = null,
+    private val onRestock: ((RestockingRecord) -> Unit)? = null
 ) : FrameLayout(activity) {
     private enum class Tab(val label: Int, val icon: Int, val viewId: Int) {
         START(R.string.home_start, R.drawable.home_house, R.id.home_nav_start),
@@ -619,7 +620,13 @@ class StockerHomeView(
             contentDescription = "$title. $subtitle"
         }
         card(row) {
-            if (state.data?.isDemo == false) { showInfo(title, subtitle); return@card }
+            if (state.data?.isDemo == false) {
+                val record = state.data?.restockingAlerts?.firstOrNull { it.id == event.id }
+                if (record != null && event.type in setOf(HomeEventType.RESTOCK_REQUIRED, HomeEventType.LOW_STOCK))
+                    showRestockingDetails(record, subtitle)
+                else showInfo(title, subtitle)
+                return@card
+            }
             showAnalysisInfo(title, subtitle, str(R.string.dialog_event_description),
                 state.data?.analysisFor(event))
         }
@@ -754,8 +761,7 @@ class StockerHomeView(
             if (selectable) {
                 if (!selectedProducts.add(record.id)) selectedProducts.remove(record.id)
                 render()
-            } else if (state.data?.isDemo == false) showInfo(record.productName,
-                "$subtitle\n${str(statusText)}" + (record.restockedQuantity?.let { "\nQuantidade retirada do estoque: $it\nAvarias: ${record.damagedQuantity ?: 0}" } ?: ""))
+            } else if (state.data?.isDemo == false) showRestockingDetails(record, subtitle)
             else showAnalysisInfo(record.productName, subtitle, str(statusText), state.data?.analysisFor(record))
         }
         val thumbnail = FrameLayout(context).apply {
@@ -808,6 +814,32 @@ class StockerHomeView(
             addView(icon(statusIcon), LayoutParams(px(21f), px(21f), Gravity.CENTER))
         }, LinearLayout.LayoutParams(px(55f), -1))
         return row
+    }
+
+    private fun showRestockingDetails(record: RestockingRecord, subtitle: String) {
+        close()
+        val ui = UiKit(context)
+        val completed = record.status == RestockingStatus.COMPLETED
+        val panel = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL; setPadding(ui.dp(24), ui.dp(24), ui.dp(24), ui.dp(20))
+            background = ui.shape()
+            addView(ui.text(if (completed) "REPOSIÇÃO CONCLUÍDA" else "PENDÊNCIA DE REPOSIÇÃO", 11f, strong = true, muted = true))
+            addView(ui.text(record.productName, 23f, strong = true), LinearLayout.LayoutParams(-1, -2).apply { topMargin = ui.dp(12) })
+            addView(ui.text(subtitle, 14f, muted = true), LinearLayout.LayoutParams(-1, -2).apply { topMargin = ui.dp(8) })
+            addView(ui.text(if (completed) "${record.restockedQuantity ?: 0} unidades retiradas do estoque · ${record.damagedQuantity ?: 0} avarias"
+                else "Confira o estoque de origem e as quantidades antes de realizar a reposição.", 14f, muted = true),
+                LinearLayout.LayoutParams(-1, -2).apply { topMargin = ui.dp(16) })
+        }
+        val detailDialog = AlertDialog.Builder(activity).setView(panel).create()
+        dialog = detailDialog
+        if (onRestock != null && record.shelfCode.toLongOrNull() != null) {
+            panel.addView(ui.button(if (completed) "Iniciar nova reposição" else "Iniciar reposição", true) {
+                detailDialog.dismiss(); if (!signingOut) onRestock.invoke(record)
+            }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = ui.dp(24) })
+        }
+        panel.addView(ui.button("Fechar") { detailDialog.dismiss() }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = ui.dp(10) })
+        detailDialog.show()
+        detailDialog.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
     }
 
     private fun openAnalysisResult(id: String? = state.data?.shelfAnalysis?.id) {

@@ -20,7 +20,7 @@ class HttpStockerHomeRepository : StockerHomeRepository {
             check(it.getLong("company_id") == identity.companyId && it.getLong("employee_id") == identity.employeeId)
             RestockingRecord(it.getLong("restocking_id").toString(), it.getString("product_name"), "",
                 it.getLong("shelf_id").toString(), OffsetDateTime.parse(it.getString("restocking_date")).toInstant(), RestockingStatus.COMPLETED,
-                restockedQuantity = it.getInt("restocked_quantity"), damagedQuantity = it.getInt("qnt_avarias"))
+                restockedQuantity = it.getInt("restocked_quantity"), damagedQuantity = it.getInt("qnt_avarias"), productId = it.getLong("product_id"))
         }
         val alerts = JSONArray(api.request(userId, "/api/v1/mobile/alerts")).objects()
         val events = alerts.map {
@@ -37,7 +37,7 @@ class HttpStockerHomeRepository : StockerHomeRepository {
                     row.getLong("shelf_id").toString(),
                     if (!row.isNull("stockout_date")) StockDates.alertDate(row.getString("stockout_date"))
                         .atStartOfDay(ZoneId.of("America/Sao_Paulo")).toInstant() else java.time.Instant.EPOCH,
-                    RestockingStatus.REQUIRED)
+                    RestockingStatus.REQUIRED, productId = row.optionalLong("product_id"))
             }, profileWorkSummary = ProfileWorkSummary(summary.getInt("restocks"), summary.getInt("damages"),
                 if (identity.role == "MANAGER") "Gerente" else "Repositor", identity.companyName))
     }

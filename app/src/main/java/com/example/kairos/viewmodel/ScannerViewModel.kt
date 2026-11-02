@@ -15,7 +15,8 @@ enum class ScannerStep { START, PREVIEW, RESULT, IN_PROGRESS, CONFIRMING, COMPLE
 data class ScannerState(val step: ScannerStep = ScannerStep.START, val loading: Boolean = false,
                         val catalog: StockCatalog? = null, val shelfId: Long? = null,
                         val result: ShelfResult? = null, val error: String = "", val photo: File? = null,
-                        val pending: ConfirmedRestocking? = null, val draft: ConfirmedRestocking? = null)
+                        val pending: ConfirmedRestocking? = null, val draft: ConfirmedRestocking? = null,
+                        val manualEntry: Boolean = false)
 
 class ScannerViewModel(private val repository: ScannerRepository = HttpScannerRepository()) : ViewModel() {
     private val mutable = MutableLiveData(ScannerState())
@@ -30,14 +31,19 @@ class ScannerViewModel(private val repository: ScannerRepository = HttpScannerRe
 
     fun recover(owner: String, request: ConfirmedRestocking?) { recoveryOwner = owner; recovered = request }
 
-    fun account(owner: String) {
+    fun account(owner: String, initialShelf: Long? = null, initialProduct: Long? = null) {
         if (uid == owner) return
         val recovery = recovered.takeIf { recoveryOwner == owner }
         reset(); uid = owner; recovered = recovery
         run { before ->
             val catalog = repository.catalog(owner)
             val pending = recovered
-            if (pending == null) before.copy(catalog = catalog) else before.copy(catalog = catalog,
+            if (pending == null && initialShelf != null) {
+                require(catalog.shelves.any { it.id == initialShelf }) { "A gôndola não está mais disponível para sua conta." }
+                require(initialProduct == null || catalog.products.any { it.id == initialProduct }) { "O produto não está mais no catálogo do mercado." }
+                before.copy(catalog = catalog, step = ScannerStep.RESULT, shelfId = initialShelf,
+                    result = ShelfResult(initialShelf, emptyList(), emptyList()), manualEntry = true)
+            } else if (pending == null) before.copy(catalog = catalog) else before.copy(catalog = catalog,
                 step = ScannerStep.RESULT, shelfId = pending.shelfId, pending = pending,
                 result = ShelfResult(pending.shelfId, emptyList(), emptyList()))
         }
@@ -49,7 +55,7 @@ class ScannerViewModel(private val repository: ScannerRepository = HttpScannerRe
         before.photo?.takeIf { it != file }?.delete()
         val verification = before.step in setOf(ScannerStep.IN_PROGRESS, ScannerStep.CONFIRMING)
         mutable.value = before.copy(photo = file, step = if (verification) ScannerStep.CONFIRMING else ScannerStep.PREVIEW,
-            result = if (verification) before.result else null, error = "")
+            result = if (verification) before.result else null, error = "", manualEntry = if (verification) before.manualEntry else false)
     }
     private fun run(action: (ScannerState) -> ScannerState) {
         val before = mutable.value!!

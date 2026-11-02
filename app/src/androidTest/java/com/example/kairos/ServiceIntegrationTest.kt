@@ -110,6 +110,36 @@ class ServiceIntegrationTest {
         } finally { file.delete(); instrumentation.runOnMainSync { vm.state.removeObserver(observer); store.clear() } }
     }
 
+    @Test fun alertEntryPreparesAnAuthorizedRestockingWithoutCallingAiOrChangingStock() {
+        val aiCalls = AtomicInteger()
+        val writes = AtomicInteger()
+        val repository = object : ScannerRepository {
+            override fun catalog(uid: String) = StockCatalog(listOf(CatalogItem(9,"Gôndola")), listOf(CatalogItem(3,"Origem")), listOf(CatalogItem(4,"Produto")))
+            override fun analyze(uid: String, shelfId: Long, image: ByteArray): ShelfResult { aiCalls.incrementAndGet(); error("Not expected") }
+            override fun confirm(uid: String, request: ConfirmedRestocking) { writes.incrementAndGet() }
+        }
+        val store = ViewModelStore()
+        val states = LinkedBlockingQueue<ScannerState>()
+        val observer = Observer<ScannerState> { states.offer(it) }
+        lateinit var vm: ScannerViewModel
+        try {
+            instrumentation.runOnMainSync {
+                vm=ScannerViewModel(repository); store.put("alert-entry",vm)
+                vm.state.observeForever(observer); vm.account("alert-user",9,4)
+            }
+            var ready: ScannerState
+            do { ready=states.poll(10,TimeUnit.SECONDS) ?: error("Catalog timed out") } while(ready.loading || ready.catalog==null)
+            assertEquals(ScannerStep.RESULT,ready.step)
+            assertEquals(9L,ready.shelfId); assertTrue(ready.manualEntry)
+            instrumentation.runOnMainSync {
+                val request=vm.prepare(3,4,5,1)
+                assertEquals(4L,request.productId)
+                vm.begin(request)
+                assertEquals(ScannerStep.IN_PROGRESS,vm.state.value!!.step)
+            }
+            assertEquals(0,aiCalls.get()); assertEquals(0,writes.get())
+        } finally { instrumentation.runOnMainSync { vm.state.removeObserver(observer); store.clear() } }
+    }
     @Test fun supportAndAnalysisRenderWithLocalAssets() {
         ActivityScenario.launch(AccountTestActivity::class.java).use { scenario ->
             lateinit var dialog: ChatDialog
