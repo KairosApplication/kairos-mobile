@@ -26,7 +26,7 @@ class HttpStockerHomeRepository : StockerHomeRepository {
         val events = alerts.map {
             HomeEvent(it.getLong("id").toString(), HomeEventType.RESTOCK_REQUIRED, it.getLong("shelf_id").toString(),
                 if (it.isNull("stockout_date")) java.time.Instant.EPOCH else
-                    LocalDate.parse(it.getString("stockout_date")).atStartOfDay(ZoneId.of("America/Sao_Paulo")).toInstant(),
+                    StockDates.alertDate(it.getString("stockout_date")).atStartOfDay(ZoneId.of("America/Sao_Paulo")).toInstant(),
                 title = it.getString("description"))
         }
         val history = records.map { HomeEvent(it.id, HomeEventType.RESTOCK_COMPLETED, it.shelfCode, it.occurredAt) }
@@ -35,7 +35,7 @@ class HttpStockerHomeRepository : StockerHomeRepository {
             restockingAlerts = alerts.map { row ->
                 RestockingRecord(row.getLong("id").toString(), row.optString("product_name", row.getString("description")), "",
                     row.getLong("shelf_id").toString(),
-                    if (!row.isNull("stockout_date")) LocalDate.parse(row.getString("stockout_date"))
+                    if (!row.isNull("stockout_date")) StockDates.alertDate(row.getString("stockout_date"))
                         .atStartOfDay(ZoneId.of("America/Sao_Paulo")).toInstant() else java.time.Instant.EPOCH,
                     RestockingStatus.REQUIRED)
             }, profileWorkSummary = ProfileWorkSummary(summary.getInt("restocks"), summary.getInt("damages"),
