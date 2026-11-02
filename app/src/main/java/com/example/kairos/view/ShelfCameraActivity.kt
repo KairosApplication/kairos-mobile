@@ -37,6 +37,7 @@ class ShelfCameraActivity : AppCompatActivity() {
     }
     private fun dp(value: Int) = (resources.displayMetrics.density * value).toInt()
     override fun onCreate(savedInstanceState: Bundle?) {
+        com.example.kairos.model.home.StockerPreferences.restoreTheme(this)
         super.onCreate(savedInstanceState)
         window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
         val root = LinearLayout(this).apply {

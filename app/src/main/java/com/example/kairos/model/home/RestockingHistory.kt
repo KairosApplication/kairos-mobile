@@ -6,7 +6,7 @@ import java.time.ZoneId
 import java.time.Instant
 import java.util.Locale
 
-enum class RestockingStatus { REQUIRED, LOW_STOCK, COMPLETED }
+enum class RestockingStatus { REQUIRED, LOW_STOCK, COMPLETED, OBSERVED }
 
 data class RestockingRecord(
     val id: String,

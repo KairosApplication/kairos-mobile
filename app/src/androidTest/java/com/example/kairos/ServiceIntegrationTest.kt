@@ -129,17 +129,68 @@ class ServiceIntegrationTest {
             }
             var ready: ScannerState
             do { ready=states.poll(10,TimeUnit.SECONDS) ?: error("Catalog timed out") } while(ready.loading || ready.catalog==null)
-            assertEquals(ScannerStep.RESULT,ready.step)
+            assertEquals(ScannerStep.IN_PROGRESS,ready.step)
             assertEquals(9L,ready.shelfId); assertTrue(ready.manualEntry)
-            instrumentation.runOnMainSync {
-                val request=vm.prepare(3,4,5,1)
-                assertEquals(4L,request.productId)
-                vm.begin(request)
-                assertEquals(ScannerStep.IN_PROGRESS,vm.state.value!!.step)
-            }
+            assertEquals(listOf(4L),ready.selectedProductIds)
             assertEquals(0,aiCalls.get()); assertEquals(0,writes.get())
         } finally { instrumentation.runOnMainSync { vm.state.removeObserver(observer); store.clear() } }
     }
+    @Test fun batchCanFinishWithoutPhotoAndPreservesCommandsAfterTimeout() {
+        val calls = AtomicInteger()
+        val requests = listOf(3L,4L).map { ConfirmedRestocking(java.util.UUID.randomUUID().toString(),1,2,it,5,0) }
+        val expected = requests.toList()
+        val repository = object : ScannerRepository {
+            override fun catalog(uid: String) = StockCatalog(listOf(CatalogItem(1,"Shelf")),listOf(CatalogItem(2,"Inventory")),listOf(CatalogItem(3,"A"),CatalogItem(4,"B")))
+            override fun analyze(uid: String,shelfId: Long,image: ByteArray): ShelfResult = error("No AI needed")
+            override fun confirm(uid: String,request: ConfirmedRestocking) = error("Must use batch")
+            override fun confirmBatch(uid: String,requests: List<ConfirmedRestocking>) {
+                assertEquals(expected,requests)
+                if(calls.incrementAndGet()==1) throw java.io.IOException("Timeout")
+            }
+        }
+        val store=ViewModelStore()
+        val states=LinkedBlockingQueue<ScannerState>()
+        val observer=Observer<ScannerState> { states.offer(it) }
+        lateinit var vm: ScannerViewModel
+        fun awaitReady(completedAttempt: Boolean = false): ScannerState {
+            var state: ScannerState
+            do { state=states.poll(10,TimeUnit.SECONDS) ?: error("No state") } while(state.loading || state.catalog==null || (completedAttempt && state.error.isEmpty() && state.step!=ScannerStep.COMPLETE))
+            return state
+        }
+        try {
+            instrumentation.runOnMainSync { vm=ScannerViewModel(repository);store.put("batch",vm);vm.state.observeForever(observer);vm.account("batch-user",1,initialProducts=listOf(3,4)) }
+            assertEquals(ScannerStep.IN_PROGRESS,awaitReady().step);assertEquals(0,calls.get())
+            states.clear()
+            instrumentation.runOnMainSync { vm.finalizeBatch(requests) }
+            val failed=awaitReady(true)
+            assertEquals(requests,failed.pendingBatch);assertEquals(ScannerStep.IN_PROGRESS,failed.step)
+            states.clear()
+            instrumentation.runOnMainSync { vm.finalizeBatch(failed.pendingBatch) }
+            assertEquals(ScannerStep.COMPLETE,awaitReady(true).step);assertEquals(2,calls.get())
+        } finally { instrumentation.runOnMainSync { vm.state.removeObserver(observer);store.clear() } }
+    }
+
+    @Test fun resultStartsWithOneSelectedProductAndDoesNotRequireAll() {
+        ActivityScenario.launch(AccountTestActivity::class.java).use { scenario ->
+            scenario.onActivity { activity ->
+                val products=listOf(3L,4L).map { id -> com.example.kairos.model.home.RestockingRecord("selection:$id","Product $id","","1",java.time.Instant.now(),com.example.kairos.model.home.RestockingStatus.REQUIRED,productId=id) }
+                var selected=emptyList<com.example.kairos.model.home.RestockingRecord>()
+                val home=com.example.kairos.view.StockerHomeView(activity,{}, {},onRestock={ selected=it })
+                activity.setContentView(home)
+                home.showStandaloneResult("selection-test","",com.example.kairos.model.home.ShelfAnalysis("1","A","Sector",2,products))
+                val start=home.findViewById<android.view.View>(R.id.analysis_start)
+                val first=home.findViewWithTag<android.widget.CheckBox>("select:selection:3")
+                val second=home.findViewWithTag<android.widget.CheckBox>("select:selection:4")
+                assertFalse(start.isEnabled)
+                first.isChecked=true
+                assertTrue(start.isEnabled);assertFalse(second.isChecked)
+                start.performClick();assertEquals(listOf(products.first()),selected)
+                first.isChecked=false;assertFalse(start.isEnabled)
+                home.close()
+            }
+        }
+    }
+
     @Test fun supportAndAnalysisRenderWithLocalAssets() {
         ActivityScenario.launch(AccountTestActivity::class.java).use { scenario ->
             lateinit var dialog: ChatDialog

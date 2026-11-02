@@ -94,11 +94,12 @@ class MainActivity : AppCompatActivity() {
             vm.state.value?.user?.let { homeVm.load(it.uid, force = true) }
         }, onLogout = vm::logout, onAccountEdit = vm::editAccount,
             onChat = { chatDialog?.close(); chatDialog = ChatDialog(this, chatVm).also { it.show() } },
-            onScanner = { scannerResult.launch(android.content.Intent(this, ScannerActivity::class.java)) },
-            onRestock = { record ->
+            onScanner = { scannerResult.launch(android.content.Intent(this, ScannerActivity::class.java)); UiMotion.open(this) },
+            onRestock = { records ->
                 scannerResult.launch(android.content.Intent(this, ScannerActivity::class.java)
-                    .putExtra("restockShelfId", record.shelfCode.toLong())
-                    .putExtra("restockProductId", record.productId ?: 0L))
+                    .putExtra("restockShelfId", records.first().shelfCode.toLong())
+                    .putExtra("restockProductIds", records.mapNotNull { it.productId }.toLongArray()))
+                UiMotion.open(this)
             }).apply { visibility = View.GONE }
         root.addView(homeView, FrameLayout.LayoutParams(-1, -1))
         loadingView = LoadingView(this).apply { visibility = View.GONE }

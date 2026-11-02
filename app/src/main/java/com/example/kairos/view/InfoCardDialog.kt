@@ -58,7 +58,9 @@ internal object InfoCardDialog {
             addView(content)
         }).create()
         dialog.show()
+        UiMotion.reveal(content)
         dialog.window?.apply {
+            if (android.animation.ValueAnimator.areAnimatorsEnabled()) setWindowAnimations(R.style.KairosDialogMotion)
             setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
             decorView.elevation = 0f
             decorView.translationZ = 0f

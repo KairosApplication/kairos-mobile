@@ -44,6 +44,7 @@ import com.example.kairos.view.settings.SettingsDestination
 import com.example.kairos.view.settings.SettingsTemplateView
 import com.example.kairos.view.settings.SettingsContentView
 import com.example.kairos.model.home.StockerPreferences
+import com.example.kairos.model.home.ShelfAnalysis
 import com.example.kairos.view.settings.ProfileView
 import com.example.kairos.view.settings.SecurityView
 import com.example.kairos.view.settings.AccountEditField
@@ -65,7 +66,8 @@ class StockerHomeView(
     private val onAccountEdit: ((AccountEditRequest) -> Unit)? = null,
     private val onChat: (() -> Unit)? = null,
     private val onScanner: (() -> Unit)? = null,
-    private val onRestock: ((RestockingRecord) -> Unit)? = null
+    private val onRestock: ((List<RestockingRecord>) -> Unit)? = null,
+    private val onResultBack: (() -> Unit)? = null
 ) : FrameLayout(activity) {
     private enum class Tab(val label: Int, val icon: Int, val viewId: Int) {
         START(R.string.home_start, R.drawable.home_house, R.id.home_nav_start),
@@ -158,6 +160,9 @@ class StockerHomeView(
     private var analysisVisible = false
     private var analysisId: String? = null
     private val selectedProducts = linkedSetOf<String>()
+    private var startAction: View? = null
+    private var lastRoute: String? = null
+    private var standaloneResult = false
     private var pendingRestoredState: Bundle? = null
     private var settingsDestination = SettingsDestination.ROOT
     private var historyResults: LinearLayout? = null
@@ -331,6 +336,7 @@ class StockerHomeView(
 
     fun handleBack(): Boolean {
         if (analysisVisible) {
+            if (standaloneResult && onResultBack != null) { onResultBack.invoke(); return true }
             analysisVisible = false
             analysisId = null
             selectedProducts.clear()
@@ -347,6 +353,16 @@ class StockerHomeView(
     }
 
     fun close() { dialog?.dismiss(); dialog = null; accountEditor = null }
+
+    fun showStandaloneResult(uid: String, email: String, analysis: ShelfAnalysis) {
+        standaloneResult = true
+        user = SignedInUser(uid, email, null)
+        state = StockerHomeUiState(data = com.example.kairos.model.home.StockerHomeData(
+            analysis.products.count { it.status != RestockingStatus.COMPLETED }, 0,
+            emptyList(), emptyList(), emptyList(), false, shelfAnalysis = analysis, analyses = listOf(analysis)))
+        analysisVisible = true; analysisId = analysis.id
+        render()
+    }
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         ViewCompat.requestApplyInsets(this)
@@ -431,7 +447,12 @@ class StockerHomeView(
         val oldSearch = findViewById<EditText>(R.id.history_search)
         val restoreSearchFocus = tab == Tab.HISTORY && oldSearch?.hasFocus() == true
         val searchSelection = oldSearch?.selectionStart ?: 0
+        val route = "$tab:$analysisVisible:$analysisId:$settingsDestination"
+        val animateRoute = route != lastRoute
+        lastRoute = route
+        startAction = null
         body.removeAllViews()
+        if (animateRoute) UiMotion.reveal(body)
         historyResults = null
         filterButton = null
         body.setPadding(0, 0, 0, px(20f))
@@ -743,6 +764,7 @@ class StockerHomeView(
             RestockingStatus.REQUIRED -> Triple(color(R.color.home_danger), R.string.restocking_required, R.drawable.home_stop)
             RestockingStatus.LOW_STOCK -> Triple(color(R.color.home_caution), R.string.restocking_low, R.drawable.home_warning)
             RestockingStatus.COMPLETED -> Triple(color(R.color.home_success), R.string.restocking_done, R.drawable.home_check)
+            RestockingStatus.OBSERVED -> Triple(secondary, R.string.restocking_observed, R.drawable.home_camera)
         }
         val date = record.occurredAt.atZone(ZoneId.of("America/Sao_Paulo"))
         val elapsed = Duration.between(record.occurredAt, Instant.now()).toMinutes()
@@ -759,8 +781,7 @@ class StockerHomeView(
         }
         card(row) {
             if (selectable) {
-                if (!selectedProducts.add(record.id)) selectedProducts.remove(record.id)
-                render()
+                row.findViewWithTag<CheckBox>("select:${record.id}")?.let { it.isChecked = !it.isChecked }
             } else if (state.data?.isDemo == false) showRestockingDetails(record, subtitle)
             else showAnalysisInfo(record.productName, subtitle, str(statusText), state.data?.analysisFor(record))
         }
@@ -794,10 +815,11 @@ class StockerHomeView(
             RestockingStatus.REQUIRED -> intArrayOf(0xFFDE4138.toInt(), 0xFFE0382E.toInt())
             RestockingStatus.LOW_STOCK -> intArrayOf(0xFFE0AB3D.toInt(), 0xFFE8A825.toInt())
             RestockingStatus.COMPLETED -> intArrayOf(0xFF0C8449.toInt(), 0xFF0A874A.toInt())
+            RestockingStatus.OBSERVED -> intArrayOf(color(R.color.home_subtle_tile), color(R.color.home_subtle_tile))
         }
         if (selectable) row.addView(CheckBox(context).apply {
             id = View.generateViewId()
-            tag = record.id
+            tag = "select:${record.id}"
             contentDescription = str(R.string.analysis_select_product, record.productName)
             buttonTintList = ColorStateList.valueOf(color(R.color.home_active))
             isChecked = record.id in selectedProducts
@@ -806,7 +828,7 @@ class StockerHomeView(
             minimumHeight = (48 * density).toInt()
             setOnCheckedChangeListener { _, checked ->
                 if (checked) selectedProducts.add(record.id) else selectedProducts.remove(record.id)
-                findViewById<View>(R.id.analysis_start)?.isEnabled = selectedProducts.isNotEmpty() && !signingOut
+                updateStartAvailability()
             }
         }, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = px(10f) })
         else row.addView(FrameLayout(context).apply {
@@ -847,7 +869,9 @@ class StockerHomeView(
             return
         }
         val pending = analysis.products.any { it.status != RestockingStatus.COMPLETED }
-        selectedProducts.retainAll(analysis.products.filter { it.status != RestockingStatus.COMPLETED }.map { it.id }.toSet())
+        fun selectable(record: RestockingRecord) = record.status != RestockingStatus.COMPLETED &&
+            (state.data?.isDemo == true || record.productId != null)
+        selectedProducts.retainAll(analysis.products.filter(::selectable).map { it.id }.toSet())
         val shelf = LinearLayout(context).apply {
             minimumHeight = px(99f)
             gravity = Gravity.CENTER_VERTICAL
@@ -887,27 +911,34 @@ class StockerHomeView(
             analysis.products.count { it.status == RestockingStatus.LOW_STOCK }), 0xFFE8A825.toInt(), R.drawable.home_warning)
         summary(if (analysis.fromPhoto) str(R.string.analysis_product_count, analysis.analyzedProducts)
             else "${analysis.products.size} produtos nesta reposição", 0xFF0A874A.toInt(), R.drawable.home_check)
+        if (analysis.observations.isNotEmpty()) {
+            add(label("Observações da foto", 17f), 20f)
+            analysis.observations.forEach { add(label(it, 14f, secondary), 8f) }
+        }
         heading(if (pending) R.string.analysis_products else R.string.analysis_review_products, 20f)
-        analysis.products.forEach { add(productCard(it, selectable = it.status != RestockingStatus.COMPLETED), 10f) }
+        analysis.products.forEach { add(productCard(it, selectable = selectable(it)), 10f) }
         if (pending) {
             add(textButton(str(R.string.analysis_start)) {
                 if (state.data?.isDemo == false && onRestock != null) {
                     val selected = analysis.products.filter { it.id in selectedProducts && it.status != RestockingStatus.COMPLETED }
-                    if (selected.size == 1) onRestock.invoke(selected.single())
-                    else if (selected.size > 1) {
-                        close()
-                        dialog = AlertDialog.Builder(activity).setTitle("Escolha o produto para repor agora")
-                            .setItems(selected.map { it.productName }.toTypedArray()) { _, index -> onRestock.invoke(selected[index]) }.show()
-                    }
+                    if (selected.isNotEmpty()) onRestock.invoke(selected)
                 } else showInfo(str(R.string.analysis_start), str(R.string.analysis_demo_only))
             }.apply {
                 id = R.id.analysis_start
+                startAction = this
                 isEnabled = selectedProducts.isNotEmpty() && !signingOut
                 minimumHeight = px(59f)
                 background = rounded(color(R.color.home_button), 50f)
             }, 35f, 81f)
         }
         if (state.data?.isDemo == true) add(label(str(R.string.home_demo), 12f, secondary).apply { gravity = Gravity.CENTER }, 16f)
+    }
+
+    private fun updateStartAvailability() {
+        startAction?.apply {
+            isEnabled = selectedProducts.isNotEmpty() && !signingOut
+            alpha = if (isEnabled) 1f else .55f
+        }
     }
 
     private fun renderHistory() {
