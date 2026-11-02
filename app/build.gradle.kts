@@ -33,6 +33,8 @@ android {
     buildTypes {
         debug {
             if (isolatedTests) applicationIdSuffix = ".integration"
+            buildConfigField("String", "SPRING_API_URL", "\"${providers.gradleProperty("kairos.springUrl").getOrElse("http://127.0.0.1:8081")}\"")
+            buildConfigField("String", "CHAT_API_URL", "\"${providers.gradleProperty("kairos.chatUrl").getOrElse("http://127.0.0.1:8000")}\"")
         }
         release {
             isMinifyEnabled = false

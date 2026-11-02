@@ -429,9 +429,6 @@ class MainActivity : AppCompatActivity() {
                     button("Criar cadastro de cliente") { vm.registerCustomer() }
                 }
                 button("Verificar acesso novamente") { vm.reloadSession() }
-                if (com.example.kairos.BuildConfig.DEBUG) button("Testar telas em demonstração") {
-                    startActivity(android.content.Intent().setClassName(this, "com.example.kairos.view.DemoPreviewActivity"))
-                }
                 if (linked) button("Conversar com o suporte IA") {
                     chatDialog?.close(); chatDialog = ChatDialog(this, chatVm).also { it.show() }
                 }

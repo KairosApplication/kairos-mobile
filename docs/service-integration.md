@@ -4,7 +4,9 @@
 
 > Login e disponibilidade dos serviços foram separados: configuração ausente, 403 ou indisponibilidade do servidor preservam a identidade Firebase e mostram a tela de acesso empresarial com aviso. Isso não concede cargo, empresa, Home operacional ou dados fictícios. Tokens rejeitados com 401 continuam invalidando o acesso. Os endereços dos serviços ainda precisam ser fornecidos/configurados para usar estoque e IA reais.
 
-> Para testar a interface enquanto os serviços estão pendentes, o build debug oferece o botão **Testar telas em demonstração** nessa tela. Ele abre uma Activity exclusiva de src/debug, com aviso permanente de dados fictícios, sem autenticar como funcionário, chamar APIs ou movimentar estoque. Fechar a prévia preserva a conta Firebase. Essa opção e a Activity não estão disponíveis no release.
+> A opção de demonstração foi retirada a pedido do responsável. A área operacional depende da configuração e execução dos serviços reais.
+
+> O debug aponta para a API local real em `http://127.0.0.1:8081` e chatbot em `http://127.0.0.1:8000`, portas documentadas dos serviços. `tools/connect-local-services.ps1` verifica a API e configura adb reverse por USB. HTTP só é permitido em loopback no debug; release continua exigindo HTTPS. Isso não inicia os servidores nem transforma uma indisponibilidade em dados simulados. Neste computador, a instalação de WSL/Docker ainda depende de autorização específica; também não há credenciais Admin Firebase configuradas.
 
 Entrega local em 01/11/2026. Os serviços precisam ser configurados e implantados em conjunto antes do uso real. Nenhum banco remoto foi alterado e nenhuma credencial de IA foi utilizada.
 

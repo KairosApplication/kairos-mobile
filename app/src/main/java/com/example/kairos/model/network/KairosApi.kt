@@ -12,6 +12,17 @@ import java.util.concurrent.TimeUnit
 
 class ServiceConfigurationException : IllegalArgumentException("Você entrou, mas a conexão com os serviços do mercado ainda não foi configurada.")
 
+object ApiOrigin {
+    fun validate(base: String, allowLocalHttp: Boolean) {
+        val origin = runCatching { URI(base) }.getOrNull()
+        val local = origin?.scheme == "http" && origin.host in setOf("127.0.0.1", "localhost", "10.0.2.2")
+        if (origin == null || !(origin.scheme == "https" || allowLocalHttp && local) || origin.host.isNullOrBlank() ||
+            origin.userInfo != null || origin.query != null || origin.fragment != null || origin.path.orEmpty() !in setOf("", "/")) {
+            throw ServiceConfigurationException()
+        }
+    }
+}
+
 class ApiFailure(val status: Int) : Exception(when (status) {
     401 -> "Sessão expirada ou revogada. Entre novamente."
     403 -> "Sua conta não tem autorização para esta operação."
@@ -39,9 +50,7 @@ class FirebaseTokens(private val auth: FirebaseAuth) : IdentityTokenSource {
 /** No cookie jar, redirects, disk cache, body logging or automatic retry of mutations. */
 class KairosApi(private val base: String, private val tokens: IdentityTokenSource) {
     fun request(uid: String, path: String, method: String = "GET", payload: JSONObject? = null): String {
-        val origin = runCatching { URI(base) }.getOrNull()
-        if (!(origin?.scheme == "https" && !origin.host.isNullOrBlank() && origin.userInfo == null &&
-            origin.query == null && origin.fragment == null && origin.path.orEmpty() in setOf("", "/"))) throw ServiceConfigurationException()
+        ApiOrigin.validate(base, BuildConfig.DEBUG)
         require(path.startsWith("/api/v1/") && !path.contains(".."))
         fun owner() { if (tokens.uid() != uid) throw AccountChangedException() }
         owner()
