@@ -818,30 +818,12 @@ class StockerHomeView(
 
     private fun showRestockingDetails(record: RestockingRecord, subtitle: String) {
         close()
-        val ui = UiKit(context)
-        val completed = record.status == RestockingStatus.COMPLETED
-        val panel = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL; setPadding(ui.dp(24), ui.dp(24), ui.dp(24), ui.dp(20))
-            background = ui.shape()
-            addView(ui.text(if (completed) "REPOSIÇÃO CONCLUÍDA" else "PENDÊNCIA DE REPOSIÇÃO", 11f, strong = true, muted = true))
-            addView(ui.text(record.productName, 23f, strong = true), LinearLayout.LayoutParams(-1, -2).apply { topMargin = ui.dp(12) })
-            addView(ui.text(subtitle, 14f, muted = true), LinearLayout.LayoutParams(-1, -2).apply { topMargin = ui.dp(8) })
-            addView(ui.text(if (completed) "${record.restockedQuantity ?: 0} unidades retiradas do estoque · ${record.damagedQuantity ?: 0} avarias"
-                else "Confira o estoque de origem e as quantidades antes de realizar a reposição.", 14f, muted = true),
-                LinearLayout.LayoutParams(-1, -2).apply { topMargin = ui.dp(16) })
-        }
-        val detailDialog = AlertDialog.Builder(activity).setView(panel).create()
-        dialog = detailDialog
-        if (onRestock != null && record.shelfCode.toLongOrNull() != null) {
-            panel.addView(ui.button(if (completed) "Iniciar nova reposição" else "Iniciar reposição", true) {
-                detailDialog.dismiss(); if (!signingOut) onRestock.invoke(record)
-            }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = ui.dp(24) })
-        }
-        panel.addView(ui.button("Fechar") { detailDialog.dismiss() }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = ui.dp(10) })
-        detailDialog.show()
-        detailDialog.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+        val details = state.data?.analysisFor(record)
+        dialog = InfoCardDialog.show(activity, scale, record.productName,
+            if (record.status == RestockingStatus.COMPLETED) "Reposição concluída. Consulte os produtos e os dados registrados."
+            else "Confira os produtos e a situação desta gôndola.", subtitle,
+            primary = "Ver reposição", action = { openAnalysisResult(details?.id) }, actionEnabled = details != null)
     }
-
     private fun openAnalysisResult(id: String? = state.data?.shelfAnalysis?.id) {
         if (signingOut || state.data?.analysis(id) == null) return
         close()
@@ -903,12 +885,21 @@ class StockerHomeView(
             analysis.products.count { it.status == RestockingStatus.REQUIRED }), 0xFFE0382E.toInt(), R.drawable.home_stop)
         summary(resources.getQuantityString(R.plurals.home_low_stock_title, analysis.products.count { it.status == RestockingStatus.LOW_STOCK },
             analysis.products.count { it.status == RestockingStatus.LOW_STOCK }), 0xFFE8A825.toInt(), R.drawable.home_warning)
-        summary(str(R.string.analysis_product_count, analysis.analyzedProducts), 0xFF0A874A.toInt(), R.drawable.home_check)
+        summary(if (analysis.fromPhoto) str(R.string.analysis_product_count, analysis.analyzedProducts)
+            else "${analysis.products.size} produtos nesta reposição", 0xFF0A874A.toInt(), R.drawable.home_check)
         heading(if (pending) R.string.analysis_products else R.string.analysis_review_products, 20f)
         analysis.products.forEach { add(productCard(it, selectable = it.status != RestockingStatus.COMPLETED), 10f) }
         if (pending) {
             add(textButton(str(R.string.analysis_start)) {
-                showInfo(str(R.string.analysis_start), str(R.string.analysis_demo_only))
+                if (state.data?.isDemo == false && onRestock != null) {
+                    val selected = analysis.products.filter { it.id in selectedProducts && it.status != RestockingStatus.COMPLETED }
+                    if (selected.size == 1) onRestock.invoke(selected.single())
+                    else if (selected.size > 1) {
+                        close()
+                        dialog = AlertDialog.Builder(activity).setTitle("Escolha o produto para repor agora")
+                            .setItems(selected.map { it.productName }.toTypedArray()) { _, index -> onRestock.invoke(selected[index]) }.show()
+                    }
+                } else showInfo(str(R.string.analysis_start), str(R.string.analysis_demo_only))
             }.apply {
                 id = R.id.analysis_start
                 isEnabled = selectedProducts.isNotEmpty() && !signingOut

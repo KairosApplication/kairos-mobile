@@ -8,7 +8,8 @@ data class ProfileWorkSummary(val restocksThisWeek: Int, val damagesThisWeek: In
 
 data class ShelfAnalysis(val shelfCode: String, val aisle: String, val sector: String,
                          val analyzedProducts: Int, val products: List<RestockingRecord>,
-                         val id: String = shelfCode)
+                         val id: String = shelfCode,
+                         val fromPhoto: Boolean = true)
 
 data class HomeEvent(
     val id: String,
