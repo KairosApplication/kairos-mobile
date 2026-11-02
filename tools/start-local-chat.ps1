@@ -1,5 +1,13 @@
 $ErrorActionPreference='Stop'
 $runtime=Join-Path (Split-Path $PSScriptRoot -Parent) '.integration'
+$providerFile=Join-Path $runtime 'secrets/groq.env'
+if(Test-Path -LiteralPath $providerFile) {
+    foreach($line in Get-Content -LiteralPath $providerFile) {
+        if($line -match '^(GROQ_API_KEY|LLM_PROVIDER|LLM_MAX_TOKENS|MAX_TENTATIVAS_JUIZ|GROQ_MODEL|GROQ_FAST_MODEL)=(.*)$') {
+            [Environment]::SetEnvironmentVariable($Matches[1],$Matches[2],'Process')
+        }
+    }
+}
 $docker='D:\KairosRuntime\DockerDesktop\resources\bin\docker.exe'
 if(-not(Test-Path $docker)) { $docker=(Get-Command docker -ErrorAction Stop).Source }
 & $docker --context desktop-linux compose -f (Join-Path $PSScriptRoot 'chat-local.compose.yaml') up -d
