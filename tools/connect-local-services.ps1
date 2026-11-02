@@ -24,8 +24,37 @@ foreach ($endpoint in @('http://127.0.0.1:8081/health', 'http://127.0.0.1:8000/h
 
 $adbArguments = @()
 if ($Serial) { $adbArguments += @('-s', $Serial) }
+$existingMappings = (& $adbPath @adbArguments reverse --list) -join "`n"
 foreach ($port in @(8081, 8000)) {
-    & $adbPath @adbArguments reverse "tcp:$port" "tcp:$port"
-    if ($LASTEXITCODE -ne 0) { throw "Não foi possível conectar a porta $port. Confira o cabo USB e a depuração USB." }
+    if ($existingMappings -notmatch "(?m)\btcp:$port\s+tcp:$port(?:\s|$)") {
+        & $adbPath @adbArguments reverse "tcp:$port" "tcp:$port"
+        if ($LASTEXITCODE -ne 0) { throw "Não foi possível conectar a porta $port. Confira o cabo USB e a depuração USB." }
+    }
 }
-Write-Output 'API de estoque verificada e portas locais encaminhadas ao Android por USB. Execute o build debug no Android Studio.'
+$watchSerial = $Serial
+if (-not $watchSerial) {
+    $watchSerial = (& $adbPath get-serialno).Trim()
+    if ($LASTEXITCODE -ne 0 -or $watchSerial -eq 'unknown') { throw 'Selecione o aparelho usando -Serial.' }
+}
+$runtime = Join-Path (Split-Path $PSScriptRoot -Parent) '.integration'
+New-Item -ItemType Directory -Path $runtime -Force | Out-Null
+$watchScript = Join-Path $PSScriptRoot 'watch-local-services.ps1'
+$powershell = (Get-Process -Id $PID).Path
+$watchRunning = $false
+$watchPidFile = Join-Path $runtime 'bridge-watch.pid'
+if (Test-Path -LiteralPath $watchPidFile) {
+    $watchPidValue = 0
+    if ([int]::TryParse((Get-Content -LiteralPath $watchPidFile -Raw).Trim(), [ref]$watchPidValue)) {
+        $watchProcess = Get-CimInstance Win32_Process -Filter "ProcessId=$watchPidValue" -ErrorAction SilentlyContinue
+        $watchRunning = $watchProcess -and $watchProcess.CommandLine -and
+            $watchProcess.CommandLine.IndexOf($watchScript, [StringComparison]::OrdinalIgnoreCase) -ge 0 -and
+            $watchProcess.CommandLine.Contains($watchSerial)
+    }
+}
+if (-not $watchRunning) {
+    Start-Process -FilePath $powershell -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
+        ('"' + $watchScript + '"'), '-Serial', $watchSerial, '-AdbPath', ('"' + $adbPath + '"')) -WindowStyle Hidden `
+        -RedirectStandardOutput (Join-Path $runtime 'bridge-watch.log') `
+        -RedirectStandardError (Join-Path $runtime 'bridge-watch-error.log') | Out-Null
+}
+Write-Output 'API verificada e ponte USB conectada. A reconexão automática está ativa enquanto este computador estiver ligado.'
