@@ -6,7 +6,9 @@
 
 > A opção de demonstração foi retirada a pedido do responsável. A área operacional depende da configuração e execução dos serviços reais.
 
-> O debug aponta para a API local real em `http://127.0.0.1:8081` e chatbot em `http://127.0.0.1:8000`, portas documentadas dos serviços. `tools/connect-local-services.ps1` verifica a API e configura adb reverse por USB. HTTP só é permitido em loopback no debug; release continua exigindo HTTPS. Isso não inicia os servidores nem transforma uma indisponibilidade em dados simulados. Neste computador, a instalação de WSL/Docker ainda depende de autorização específica; também não há credenciais Admin Firebase configuradas.
+> O debug aponta para a API local real em `http://127.0.0.1:8081` e chatbot em `http://127.0.0.1:8000`, portas documentadas dos serviços. `tools/connect-local-services.ps1` verifica a API e configura adb reverse por USB. HTTP só é permitido em loopback no debug; release continua exigindo HTTPS. Isso não inicia os servidores nem transforma uma indisponibilidade em dados simulados.
+
+> Após autorização explícita, WSL 2.7.14 e Docker Desktop 4.97.0 foram instalados. Docker está em `D:\KairosRuntime\DockerDesktop`, e o diretório de dados solicitado é `D:\KairosRuntime\DockerData`, para preservar o espaço do C:. O Windows exigiu reinício ao habilitar VirtualMachinePlatform; nenhum reinício foi executado automaticamente. Docker CLI e Compose foram verificados, e a configuração Compose foi validada sem iniciar bancos. O backend ainda não foi iniciado, e ainda não há credenciais Admin Firebase configuradas. O estado local para retomada está em `.integration/local-runtime-state.json`.
 
 Entrega local em 01/11/2026. Os serviços precisam ser configurados e implantados em conjunto antes do uso real. Nenhum banco remoto foi alterado e nenhuma credencial de IA foi utilizada.
 
