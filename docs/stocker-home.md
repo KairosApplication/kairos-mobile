@@ -1,5 +1,7 @@
 # Home do repositor
 
+> Atualização: a MainActivity usa HTTP real; o repositório demonstrativo está restrito a src/debug. Consulte [service-integration.md](service-integration.md) para os contratos, scanner e limites atuais. As seções abaixo documentam a apresentação original.
+
 Referência: [Home-Repositor no Figma](https://www.figma.com/design/OFMvU7yImxJFUpV7e061Pj?node-id=418-1068).
 
 `StockerHomeView` substitui o destino provisório após autenticação e conclusão do

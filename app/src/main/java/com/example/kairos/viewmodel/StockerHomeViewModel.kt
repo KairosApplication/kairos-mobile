@@ -15,7 +15,9 @@ import java.util.concurrent.Future
 data class StockerHomeUiState(
     val loading: Boolean = false,
     val data: StockerHomeData? = null,
-    val failed: Boolean = false
+    val failed: Boolean = false,
+    val message: String = "",
+    val httpStatus: Int? = null
 )
 
 class StockerHomeViewModel(
@@ -39,8 +41,10 @@ class StockerHomeViewModel(
         activeRequest = worker.submit {
             val result = try {
                 StockerHomeUiState(data = repository.load(userId))
-            } catch (_: Exception) {
-                StockerHomeUiState(failed = true)
+            } catch (error: Exception) {
+                StockerHomeUiState(failed = true, message = if (error is com.example.kairos.model.network.ApiFailure || error is IllegalArgumentException)
+                    error.message.orEmpty() else "Não foi possível carregar os dados. Tente novamente.",
+                    httpStatus = (error as? com.example.kairos.model.network.ApiFailure)?.status)
             }
             main.post {
                 // A result from a previous account must never reach the current Home.

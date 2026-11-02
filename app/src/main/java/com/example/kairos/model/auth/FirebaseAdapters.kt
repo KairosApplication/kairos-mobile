@@ -24,7 +24,7 @@ class FirebaseAuthGateway(private val auth: FirebaseAuth) : AuthGateway {
 
     private fun identity(): AuthIdentity {
         val user = auth.currentUser ?: error("Sessão ausente.")
-        return AuthIdentity(user.uid, user.email ?: error("Email ausente."))
+        return AuthIdentity(user.uid, user.email ?: error("Email ausente."), user.isEmailVerified)
     }
 
     private fun <T> translate(reauthentication: Boolean = false, action: () -> T): T = try {
@@ -78,11 +78,17 @@ class FirebaseAuthGateway(private val auth: FirebaseAuth) : AuthGateway {
 
     override fun signOut() = auth.signOut()
 
+    override fun sendVerification() = translate {
+        (auth.currentUser ?: throw AccountChangedException()).sendEmailVerification().resultInWorker()
+        Unit
+    }
+
     override fun currentUid() = auth.currentUser?.uid
 
-    override fun refreshToken() {
+    override fun refreshToken() = translate {
         val user = auth.currentUser ?: throw AccountChangedException()
         user.getIdToken(true).resultInWorker()
+        Unit
     }
 
     private fun account(uid: String) = auth.currentUser?.takeIf { it.uid == uid } ?: throw AccountChangedException()

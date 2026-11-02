@@ -8,7 +8,7 @@ import com.example.kairos.model.auth.*
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
-enum class AuthScreen { LOGIN, LOADING, REGISTER, RECOVERY, COMPLETE_PROFILE, HOME }
+enum class AuthScreen { LOGIN, LOADING, REGISTER, RECOVERY, COMPLETE_PROFILE, VERIFY_EMAIL, BUSINESS_ACCESS, HOME }
 
 data class AuthUiState(
     val screen: AuthScreen = AuthScreen.LOGIN,
@@ -37,7 +37,12 @@ class AuthViewModel(private val repository: AuthRepository?) : ViewModel() {
     }
 
     private fun authenticated(user: SignedInUser) = AuthUiState(
-        screen = if (user.profile == null) AuthScreen.COMPLETE_PROFILE else AuthScreen.HOME,
+        screen = when {
+            user.profile == null -> AuthScreen.COMPLETE_PROFILE
+            !user.emailVerified -> AuthScreen.VERIFY_EMAIL
+            user.business?.canRestock != true -> AuthScreen.BUSINESS_ACCESS
+            else -> AuthScreen.HOME
+        },
         user = user,
         message = if (user.profile == null) "Complete os dados para concluir seu cadastro." else ""
     )
@@ -71,6 +76,9 @@ class AuthViewModel(private val repository: AuthRepository?) : ViewModel() {
                     "Adicione app/google-services.json para com.example.kairos e sincronize o Gradle.")).also { succeeded = true }
             } catch (e: AccountChangedException) {
                 AuthUiState(message = e.message.orEmpty())
+            } catch (e: com.example.kairos.model.network.ApiFailure) {
+                if (e.status == 401) { repository?.logout(); AuthUiState(message = e.message.orEmpty()) }
+                else previous.copy(message = e.message.orEmpty())
             } catch (e: ProfileIncompleteException) {
                 authenticated(e.user).copy(message = e.message.orEmpty() + "\n" +
                     AuthErrorMessage.from(e.cause as? Exception ?: e))
@@ -95,7 +103,6 @@ class AuthViewModel(private val repository: AuthRepository?) : ViewModel() {
     }
 
     fun registerAccount(email: String, password: String, confirmation: String, acceptedTerms: Boolean) = run {
-        require(acceptedTerms) { "Marque a opção de concordância com os termos de serviço." }
         require(password == confirmation) { "As senhas não coincidem." }
         authenticated(it.registerAccount(email, password))
     }
@@ -109,6 +116,16 @@ class AuthViewModel(private val repository: AuthRepository?) : ViewModel() {
     fun completeProfile(details: ProfileDetails) = run {
         authenticated(it.completeProfile(details))
     }
+
+    fun resendVerification() = run {
+        it.sendVerification()
+        authenticated(it.restoreSession() ?: throw AccountChangedException()).copy(message = "Link de verificação enviado. Confira seu e-mail.")
+    }
+
+    fun reloadSession() = run { authenticated(it.restoreSession() ?: throw AccountChangedException()) }
+
+    fun linkBusiness(password: String) = run { authenticated(it.linkBusinessAccount(password)) }
+    fun registerCustomer() = run { authenticated(it.registerCustomer()) }
 
     fun requestResetLink(email: String) = run {
         it.requestPasswordReset(email)

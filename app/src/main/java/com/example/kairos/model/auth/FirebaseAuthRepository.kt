@@ -3,14 +3,17 @@ package com.example.kairos.model.auth
 /** Coordena Auth e Firestore; cadastro parcial pode ser retomado sem criar outra conta. */
 class FirebaseAuthRepository(
     private val auth: AuthGateway,
-    private val profiles: ProfileStore
+    private val profiles: ProfileStore,
+    private val business: BusinessSessionGateway? = null
 ) : AuthRepository {
     override fun registerAccount(email: String, password: String): SignedInUser {
         AuthValidation.email(email)
         AuthValidation.password(password)
         require(password.length >= 6) { "Use uma senha com pelo menos 6 caracteres." }
         val identity = auth.create(email, password)
-        return SignedInUser(identity.uid, identity.email, null)
+        val user = SignedInUser(identity.uid, identity.email, null, identity.emailVerified)
+        try { auth.sendVerification() } catch (error: Exception) { throw ProfileIncompleteException(user, error) }
+        return user
     }
 
     override fun register(request: Registration): SignedInUser {
@@ -18,7 +21,8 @@ class FirebaseAuthRepository(
         val identity = auth.create(request.email, request.password)
         return try {
             val profile = profiles.create(request.details().toProfile(identity.uid, identity.email))
-            SignedInUser(identity.uid, identity.email, profile)
+            auth.sendVerification()
+            session(identity)
         } catch (e: Exception) {
             throw ProfileIncompleteException(SignedInUser(identity.uid, identity.email, null), e)
         }
@@ -40,14 +44,22 @@ class FirebaseAuthRepository(
             profile = profiles.updateEmail(identity.uid, identity.email)
             check(profile.uid == identity.uid) { "Perfil não corresponde à sessão." }
         }
-        return SignedInUser(identity.uid, identity.email, profile)
+        assertOwner(identity.uid)
+        val scope = if (identity.emailVerified && business != null) {
+            auth.refreshToken()
+            assertOwner(identity.uid)
+            business.session(identity.uid)
+        } else null
+        assertOwner(identity.uid)
+        return SignedInUser(identity.uid, identity.email, profile, identity.emailVerified, scope)
     }
 
     override fun completeProfile(details: ProfileDetails): SignedInUser {
         details.validate()
         val identity = auth.current() ?: throw IllegalArgumentException("Faça login novamente.")
-        return SignedInUser(identity.uid, identity.email,
-            profiles.create(details.toProfile(identity.uid, identity.email)))
+        profiles.create(details.toProfile(identity.uid, identity.email))
+        assertOwner(identity.uid)
+        return session(identity)
     }
 
     override fun requestPasswordReset(email: String) {
@@ -56,6 +68,27 @@ class FirebaseAuthRepository(
     }
 
     override fun logout() = auth.signOut()
+
+    override fun sendVerification() = auth.sendVerification()
+
+    override fun linkBusinessAccount(password: String): SignedInUser {
+        AuthValidation.password(password)
+        val identity = auth.current() ?: throw AccountChangedException()
+        require(identity.emailVerified) { "Verifique seu e-mail antes de vincular a conta." }
+        business?.link(identity.uid, password) ?: error("Vínculo indisponível.")
+        assertOwner(identity.uid)
+        return session(identity)
+    }
+
+    override fun registerCustomer(): SignedInUser {
+        val identity = auth.current() ?: throw AccountChangedException()
+        require(identity.emailVerified) { "Verifique seu e-mail primeiro." }
+        val profile = profiles.read(identity.uid) ?: throw IllegalArgumentException("Complete seu perfil primeiro.")
+        assertOwner(identity.uid)
+        business?.register(identity.uid, profile) ?: error("Cadastro indisponível.")
+        assertOwner(identity.uid)
+        return session(identity)
+    }
 
     private fun currentAccount(uid: String): SignedInUser {
         val identity = auth.current() ?: throw AccountChangedException()

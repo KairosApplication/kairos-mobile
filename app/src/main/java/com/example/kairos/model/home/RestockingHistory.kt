@@ -15,7 +15,9 @@ data class RestockingRecord(
     val shelfCode: String,
     val occurredAt: Instant,
     val status: RestockingStatus,
-    val analysisId: String? = null
+    val analysisId: String? = null,
+    val restockedQuantity: Int? = null,
+    val damagedQuantity: Int? = null
 )
 
 enum class HistoryPeriod { ALL, TODAY, YESTERDAY, LAST_SEVEN_DAYS }

@@ -21,7 +21,8 @@ object AuthDependencies {
             .setLocalCacheSettings(MemoryCacheSettings.newBuilder().build()).build()
         return FirebaseAuthRepository(
             FirebaseAuthGateway(FirebaseAuth.getInstance(app)),
-            FirestoreProfileStore(firestore)
+            FirestoreProfileStore(firestore),
+            com.example.kairos.model.network.HttpBusinessSession(com.example.kairos.model.network.ApiDependencies.spring())
         ).also { repository = it }
     }
 }

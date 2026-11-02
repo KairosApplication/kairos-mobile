@@ -1,5 +1,7 @@
 # Autenticação Firebase e perfis Firestore
 
+> Atualização: acesso empresarial, vínculo PostgreSQL e verificação de e-mail estão implementados em [service-integration.md](service-integration.md). As seções abaixo registram o fluxo Firebase original e não definem a autorização operacional atual.
+
 ## Organização MVVM
 
 | Pasta | Arquivos | Responsabilidade |

@@ -231,15 +231,15 @@ class AuthEntryView(private val activity: AppCompatActivity, private val vm: Aut
             val row = LinearLayout(context).apply { gravity = Gravity.CENTER_VERTICAL }
             consent = CheckBox(context).apply {
                 buttonTintList = ColorStateList.valueOf(Color.BLACK)
-                contentDescription = "Concordo com os termos de serviço"
+                visibility = GONE
             }
             controls.add(consent!!)
             row.addView(consent, LinearLayout.LayoutParams(px(48f), px(48f)))
-            val terms = "Concordo com os termos de serviço"
+            val terms = "Termos de serviço ainda não disponibilizados"
             row.addView(label(terms, 14f).apply {
                 gravity = Gravity.START or Gravity.CENTER_VERTICAL
                 text = SpannableString(terms).apply {
-                    val start = terms.indexOf("termos")
+                    val start = 0
                     setSpan(ForegroundColorSpan(green), start, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                     setSpan(UnderlineSpan(), start, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                 }

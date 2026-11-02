@@ -52,7 +52,7 @@ class AuthViewModelTest {
     @Test fun restoredCompleteSessionNeverOffersOnboarding() {
         verifyRestoration(SignedInUser("restored", "test@example.com", UserProfile(
             "restored", "Test", "User", LocalDate.of(2000, 1, 1), "", "test@example.com", "", ""
-        )), AuthScreen.HOME)
+        ), business = BusinessIdentity(1, 2, 3, "STOCKER", "Loja")), AuthScreen.HOME)
     }
 
     @Test fun restoredIncompleteSessionNeverOffersOnboarding() {
@@ -92,7 +92,8 @@ class AuthViewModelTest {
 
     @Test fun accountEditsKeepHomeAndOnlyPublishConfirmedDataForTheSameOwner() {
         val initial = SignedInUser("account", "old@example.com", UserProfile("account", "João", "Silva",
-            LocalDate.of(1985, 10, 22), "12364578902", "old@example.com", "12345678", "basico"))
+            LocalDate.of(1985, 10, 22), "12364578902", "old@example.com", "12345678", "basico"),
+            business = BusinessIdentity(1, 2, 3, "STOCKER", "Loja"))
         var writes = 0
         var reject = false
         val repository = object : AuthRepository {
@@ -185,7 +186,8 @@ class AuthViewModelTest {
 
     @Test fun incorrectCurrentPasswordPublishesFailureAndPreservesTheAccount() {
         val user = SignedInUser("account", "old@example.com", UserProfile("account", "Test", "User",
-            LocalDate.of(2000, 1, 1), "", "old@example.com", "", ""))
+            LocalDate.of(2000, 1, 1), "", "old@example.com", "", ""),
+            business = BusinessIdentity(1, 2, 3, "STOCKER", "Loja"))
         val vm = AuthViewModel(object : FakeRepository(false) {
             override fun restoreSession() = user
             override fun requestEmailChange(uid: String, email: String, currentPassword: String): SignedInUser =
@@ -227,7 +229,7 @@ class AuthViewModelTest {
             if (fail) throw IllegalArgumentException("Login recusado")
             return SignedInUser("test", email, UserProfile(
                 "test", "Test", "User", LocalDate.of(2000, 1, 1), "", email, "", ""
-            ))
+            ), business = BusinessIdentity(1, 2, 3, "STOCKER", "Loja"))
         }
         override fun registerAccount(email: String, password: String): SignedInUser = error("Unused")
         override fun register(request: Registration): SignedInUser = error("Unused")

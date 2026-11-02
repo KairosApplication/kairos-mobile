@@ -1,5 +1,7 @@
 # Inventário mobile e implementação de telas
 
+> Atualização: Home, perfil, chat e scanner possuem integração funcional. Veja [service-integration.md](service-integration.md) para o estado atual e os testes. A tabela abaixo registra a revisão visual anterior e não é o inventário operacional da integração.
+
 Referência: arquivo Figma `OFMvU7yImxJFUpV7e061Pj`, página Mobile,
 seção **Kairos - Protótipo Mobile v2** (`713:1430`). A seção v1 e os frames
 marcados como descartados não criam novas rotas.

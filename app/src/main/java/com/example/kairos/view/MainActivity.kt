@@ -19,7 +19,7 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.example.kairos.R
 import androidx.lifecycle.ViewModelProvider
 import com.example.kairos.model.auth.*
-import com.example.kairos.model.home.DemoStockerHomeRepository
+import com.example.kairos.model.home.HttpStockerHomeRepository
 import com.example.kairos.viewmodel.*
 import java.time.LocalDate
 import java.time.format.DateTimeParseException
@@ -34,6 +34,13 @@ class MainActivity : AppCompatActivity() {
     private lateinit var loadingView: LoadingView
     private lateinit var homeView: StockerHomeView
     private lateinit var homeVm: StockerHomeViewModel
+    private lateinit var chatVm: ChatViewModel
+    private var chatDialog: ChatDialog? = null
+    private var chatOwner: String? = null
+    private var businessScope: String? = null
+    private val scannerResult = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == RESULT_OK) vm.state.value?.user?.let { homeVm.load(it.uid, force = true) }
+    }
     private lateinit var formScroll: ScrollView
     private val fields = linkedMapOf<String, EditText>()
     private val controls = mutableListOf<View>()
@@ -61,13 +68,16 @@ class MainActivity : AppCompatActivity() {
         installSplashScreen()
         com.example.kairos.model.home.StockerPreferences.restoreTheme(this)
         super.onCreate(savedInstanceState)
+        businessScope = savedInstanceState?.getString("businessScope")
+        chatOwner = savedInstanceState?.getString("chatOwner")
         splashCompleted = savedInstanceState?.getBoolean("splashCompleted", false) ?: false
         onboardingCompleted = savedInstanceState?.getBoolean("onboardingCompleted", false) ?: false
         onboardingPage = savedInstanceState?.getInt("onboardingPage", 0)
             ?.coerceIn(onboardingPages.indices) ?: 0
         enableEdgeToEdge()
         vm = ViewModelProvider(this, AuthViewModel.Factory(AuthDependencies.repository(applicationContext)))[AuthViewModel::class.java]
-        homeVm = ViewModelProvider(this, StockerHomeViewModel.Factory(DemoStockerHomeRepository()))[StockerHomeViewModel::class.java]
+        homeVm = ViewModelProvider(this, StockerHomeViewModel.Factory(HttpStockerHomeRepository()))[StockerHomeViewModel::class.java]
+        chatVm = ViewModelProvider(this)[ChatViewModel::class.java]
         val scroll = ScrollView(this)
         formScroll = scroll
         form = LinearLayout(this).apply {
@@ -82,7 +92,9 @@ class MainActivity : AppCompatActivity() {
         root.addView(authEntry, FrameLayout.LayoutParams(-1, -1))
         homeView = StockerHomeView(this, onRetry = {
             vm.state.value?.user?.let { homeVm.load(it.uid, force = true) }
-        }, onLogout = vm::logout, onAccountEdit = vm::editAccount).apply { visibility = View.GONE }
+        }, onLogout = vm::logout, onAccountEdit = vm::editAccount,
+            onChat = { chatDialog?.close(); chatDialog = ChatDialog(this, chatVm).also { it.show() } },
+            onScanner = { scannerResult.launch(android.content.Intent(this, ScannerActivity::class.java)) }).apply { visibility = View.GONE }
         root.addView(homeView, FrameLayout.LayoutParams(-1, -1))
         loadingView = LoadingView(this).apply { visibility = View.GONE }
         root.addView(loadingView, FrameLayout.LayoutParams(-1, -1))
@@ -100,8 +112,25 @@ class MainActivity : AppCompatActivity() {
         }
         authEntry.restore(savedInstanceState?.getBundle("authEntry"))
         homeView.restore(savedInstanceState?.getBundle("home"))
-        homeVm.state.observe(this) { homeView.bind(it) }
+        homeVm.state.observe(this) {
+            homeView.bind(it)
+            if (it.httpStatus == 401) vm.logout()
+        }
         vm.state.observe(this) { state ->
+            val scope = state.user?.let { "${it.uid}:${it.business?.userId}:${it.business?.employeeId}:${it.business?.companyId}:${it.business?.role}" }
+            if (businessScope != scope && !(state.loading && state.user == null)) {
+                homeVm.reset(); homeView.reset()
+                chatDialog?.close(); chatDialog = null
+                chatVm.account(null)
+                businessScope = scope
+                chatOwner = null
+            }
+            if (chatOwner != state.user?.uid) {
+                chatDialog?.close(); chatDialog = null
+                chatOwner = state.user?.uid
+                chatVm.account(chatOwner)
+            }
+            chatVm.account(state.user?.uid)
             if (state.user != null) {
                 // A sessão restaurada nunca deve ficar atrás do onboarding.
                 onboardingRoot?.let(root::removeView)
@@ -111,7 +140,7 @@ class MainActivity : AppCompatActivity() {
             } else if (state.canStartOnboarding) {
                 showOnboarding(root)
             }
-            if (renderedScreen != state.screen) render(state)
+            if (renderedScreen != state.screen || !state.loading && state.screen in listOf(AuthScreen.BUSINESS_ACCESS, AuthScreen.VERIFY_EMAIL)) render(state)
             authEntry.update(state)
             if (state.screen == AuthScreen.HOME) {
                 state.user?.let { com.example.kairos.model.home.StockerPreferences(this, it.uid).applyTheme(this) }
@@ -147,6 +176,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString("businessScope", businessScope)
+        outState.putString("chatOwner", chatOwner)
         outState.putBundle("authEntry", authEntry.save())
         outState.putBundle("home", homeView.save())
         outState.putBoolean("splashCompleted", splashCompleted)
@@ -265,6 +296,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        chatDialog?.close(); chatDialog = null
         homeView.close()
         authEntry.close()
         dismissSplash?.let { splashRoot?.removeCallbacks(it) }
@@ -350,6 +382,8 @@ class MainActivity : AppCompatActivity() {
                 AuthScreen.REGISTER -> "Cadastrar usuário"
                 AuthScreen.RECOVERY -> "Recuperar senha"
                 AuthScreen.COMPLETE_PROFILE -> "Completar cadastro"
+                AuthScreen.VERIFY_EMAIL -> "Verifique seu e-mail"
+                AuthScreen.BUSINESS_ACCESS -> "Acesso à empresa"
                 AuthScreen.HOME -> "Bem-vindo, ${state.user?.name.orEmpty()}"
             }
         })
@@ -367,12 +401,11 @@ class MainActivity : AppCompatActivity() {
                 field("cpf", "CPF", max = 14)
                 form.addView(TextView(this).apply { text = state.user?.email.orEmpty() })
                 field("zipCode", "CEP", max = 9)
-                field("plan", "Plano", max = 20)
                 button("Concluir cadastro") {
                     try {
                         vm.completeProfile(ProfileDetails(
                             value("name").trim(), value("lastName").trim(), LocalDate.parse(value("birthDate").trim()),
-                            value("cpf").trim(), value("zipCode").trim(), value("plan").trim()
+                            value("cpf").trim(), value("zipCode").trim(), "public"
                         ))
                     } catch (_: DateTimeParseException) {
                         vm.showError("Informe uma data válida no formato AAAA-MM-DD.")
@@ -382,6 +415,26 @@ class MainActivity : AppCompatActivity() {
             AuthScreen.RECOVERY -> {
                 field("email", "Email cadastrado", emailType)
                 button("Enviar link de recuperação") { vm.requestResetLink(value("email").trim()) }
+            }
+            AuthScreen.VERIFY_EMAIL -> {
+                form.addView(TextView(this).apply { text = "Confirme o link enviado para seu e-mail antes de acessar os serviços." })
+                button("Enviar link de verificação") { vm.resendVerification() }
+                button("Já confirmei meu e-mail") { vm.reloadSession() }
+            }
+            AuthScreen.BUSINESS_ACCESS -> {
+                val linked = state.user?.business?.userId != null
+                form.addView(TextView(this).apply { text = if (linked)
+                    "Seu cargo não permite acessar a área de reposição. Solicite ao gestor o acesso adequado."
+                    else "Vincule sua conta Kairos existente com a senha do cadastro PostgreSQL. Se ainda não possui vínculo empresarial, solicite ao gestor o provisionamento da conta." })
+                if (!linked) {
+                    field("password", "Senha da conta Kairos", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD)
+                    button("Vincular conta existente") { val password = value("password"); fields["password"]?.text?.clear(); vm.linkBusiness(password) }
+                    button("Criar cadastro de cliente") { vm.registerCustomer() }
+                }
+                button("Verificar acesso novamente") { vm.reloadSession() }
+                if (linked) button("Conversar com o suporte IA") {
+                    chatDialog?.close(); chatDialog = ChatDialog(this, chatVm).also { it.show() }
+                }
             }
             AuthScreen.HOME -> Unit // Rendered by StockerHomeView.
         }

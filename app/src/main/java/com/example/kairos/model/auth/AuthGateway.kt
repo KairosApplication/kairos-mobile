@@ -1,7 +1,7 @@
 package com.example.kairos.model.auth
 
 /** Adaptadores bloqueantes: executar somente no executor do ViewModel. */
-data class AuthIdentity(val uid: String, val email: String)
+data class AuthIdentity(val uid: String, val email: String, val emailVerified: Boolean = true)
 
 interface AuthGateway {
     fun create(email: String, password: String): AuthIdentity
@@ -11,6 +11,7 @@ interface AuthGateway {
     fun signOut()
     fun currentUid(): String? = current()?.uid
     fun refreshToken() = Unit
+    fun sendVerification() = Unit
     fun requestEmailChange(uid: String, email: String, password: String): Unit = error("Operação indisponível.")
     fun changePassword(uid: String, currentPassword: String, newPassword: String): Unit = error("Operação indisponível.")
 }
