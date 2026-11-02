@@ -68,8 +68,8 @@ class ChatDialog(private val activity: AppCompatActivity, private val vm: ChatVi
         }, LinearLayout.LayoutParams(0, -2, 1f))
         header.addView(row)
         val actions = LinearLayout(activity)
-        actions.addView(list, LinearLayout.LayoutParams(0, dp(50), 1f).apply { topMargin = dp(16); marginEnd = dp(10) })
-        actions.addView(new, LinearLayout.LayoutParams(0, dp(50), 1f).apply { topMargin = dp(16) })
+        actions.addView(list, LinearLayout.LayoutParams(0, -2, 1f).apply { topMargin = dp(16); marginEnd = dp(10) })
+        actions.addView(new, LinearLayout.LayoutParams(0, -2, 1f).apply { topMargin = dp(16) })
         header.addView(actions); body.addView(header)
         body.addView(feedback)
         body.addView(ScrollView(activity).apply { isFillViewport = true; addView(content) }, LinearLayout.LayoutParams(-1, 0, 1f))
@@ -85,8 +85,7 @@ class ChatDialog(private val activity: AppCompatActivity, private val vm: ChatVi
             content.removeAllViews(); feedback.removeAllViews()
             if (state.error.isNotBlank()) {
                 feedback.setPadding(dp(20), dp(12), dp(20), 0)
-                feedback.addView(ui.text("Não foi possível concluir agora", 14f, strong = true))
-                feedback.addView(ui.text(state.error, 13f, muted = true).apply {
+                feedback.addView(ui.notice(R.drawable.home_warning,"Não foi possível concluir agora",state.error).apply {
                     accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
                 })
             } else feedback.setPadding(0, 0, 0, 0)
@@ -121,10 +120,10 @@ class ChatDialog(private val activity: AppCompatActivity, private val vm: ChatVi
                     background = ui.shape(if (ai) R.color.home_surface else R.color.home_subtle_tile, 22, ai)
                     addView(ui.text(if (ai) "KAIROS" else "VOCÊ", 10f, strong = true, muted = true))
                     addView(ui.text(message.content, 15f).apply { setTextIsSelectable(true) }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
-                    if (message.blocked || !message.approved) addView(ui.text("Esta resposta não foi aprovada. Confira as informações antes de usar.", 12f, muted = true))
+                    if (message.blocked || !message.approved) addView(ui.text("Esta resposta não foi aprovada. Confira as informações antes de usar.", 12f, muted = true),LinearLayout.LayoutParams(-1,-2).apply { topMargin=dp(12) })
                     if (message.sources.isNotEmpty()) addView(ui.text("Fontes: " + message.sources.joinToString(", ") {
                         when (it) { "pdf" -> "Manual Kairos"; "database" -> "Dados do mercado"; "memory" -> "Contexto da conversa"; else -> it }
-                    }, 11f, muted = true))
+                    }, 11f, muted = true),LinearLayout.LayoutParams(-1,-2).apply { topMargin=dp(12) })
                 })
             }
             if (state.hasNext && state.browsing) spaced(more)

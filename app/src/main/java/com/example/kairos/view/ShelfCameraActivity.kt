@@ -48,6 +48,7 @@ class ShelfCameraActivity : AppCompatActivity() {
         val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         header.addView(ImageButton(this).apply {
             setImageResource(R.drawable.scanner_back); background = null; contentDescription = "Voltar"
+            imageTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
             setOnClickListener { finish() }
         }, LinearLayout.LayoutParams(dp(48), dp(48)))
         header.addView(TextView(this).apply {

@@ -595,11 +595,11 @@ class StockerHomeView(
         card(column) { select(destination) }
         column.addView(label(str(title), 16f, secondary))
         val row = LinearLayout(context).apply { gravity = Gravity.CENTER_VERTICAL }
-        row.addView(label(count.toString(), 40f))
-        row.addView(label(if (destination == Tab.ALERTS && state.data?.isDemo == false) "Em\naberto" else str(R.string.home_week), 15f, secondary),
-            LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = px(10f) })
+        row.addView(label(count.toString(), 36f),LinearLayout.LayoutParams(0,-2,1f))
         row.addView(icon(R.drawable.home_summary_arrow), LinearLayout.LayoutParams(px(21f), px(18f)))
         column.addView(row, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(4f) })
+        column.addView(label(if (destination == Tab.ALERTS && state.data?.isDemo == false) "Em aberto" else "Nesta semana",12f,secondary),
+            LinearLayout.LayoutParams(-1,-2).apply { topMargin=px(6f) })
         return column
     }
 

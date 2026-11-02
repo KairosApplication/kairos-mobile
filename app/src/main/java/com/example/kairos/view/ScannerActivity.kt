@@ -223,8 +223,8 @@ class ScannerActivity : AppCompatActivity() {
             ScannerStep.PREVIEW -> "Confira a foto"
             else -> "Verificar gôndola"
         },true))
-        if(state.error.isNotBlank()) body.addView(label(state.error).apply {
-            background=ui.shape(border=true); setPadding(ui.dp(16),ui.dp(16),ui.dp(16),ui.dp(16)); accessibilityLiveRegion=View.ACCESSIBILITY_LIVE_REGION_POLITE
+        if(state.error.isNotBlank()) body.addView(ui.notice(R.drawable.home_warning,"Vamos conferir",state.error).apply {
+            accessibilityLiveRegion=View.ACCESSIBILITY_LIVE_REGION_POLITE
         })
         if(state.step==ScannerStep.COMPLETE) {
             setResult(RESULT_OK)
@@ -248,13 +248,16 @@ class ScannerActivity : AppCompatActivity() {
         body.addView(label("A imagem será enviada ao Groq para análise, sem armazenamento permanente no Kairos."))
     }
     private fun renderOngoing(state:ScannerState,catalog:StockCatalog) {
-        body.addView(label("Gôndola ${state.shelfId} · ${state.selectedProductIds.size} produto(s) selecionado(s)"))
+        val count=state.selectedProductIds.size
+        body.addView(label("Gôndola ${state.shelfId} · $count "+if(count==1) "produto selecionado" else "produtos selecionados"))
         body.addView(ui.text("Faça a reposição na gôndola. Ao terminar, informe as quantidades abaixo e toque em Finalizar reposição.",15f,muted=true))
         if(state.pendingBatch.isNotEmpty()) {
             state.pendingBatch.forEach { request ->
-                body.addView(label("${catalog.products.firstOrNull { it.id==request.productId }?.label.orEmpty()}\n${request.quantity} unidades · ${request.damages} avarias"))
+                body.addView(ui.notice(R.drawable.home_check,catalog.products.firstOrNull { it.id==request.productId }?.label.orEmpty(),
+                    "${request.quantity} unidades · ${request.damages} avarias"),LinearLayout.LayoutParams(-1,-2).apply { topMargin=ui.dp(12) })
             }
-            body.addView(label("Uma confirmação está pendente. A nova tentativa usa os mesmos registros para evitar duplicação."))
+            body.addView(ui.notice(R.drawable.home_warning,"Confirmação pendente","Tente novamente para conferir o registro com o mercado. Os mesmos dados serão usados, sem duplicar a reposição."),
+                LinearLayout.LayoutParams(-1,-2).apply { topMargin=ui.dp(16) })
             button("Tentar finalizar novamente") { vm.finalizeBatch(state.pendingBatch) }
             return
         }
@@ -275,11 +278,11 @@ class ScannerActivity : AppCompatActivity() {
         button("Finalizar reposição") { reviewFinalization(state) }
         button(if(state.photo==null) "Adicionar foto de conferência (opcional)" else "Trocar foto de conferência",false) { takePhoto() }
         button("Cancelar reposição",false) {
-            confirmation=AlertDialog.Builder(this).setTitle("Cancelar esta reposição?")
-                .setMessage("Nenhuma movimentação será registrada. Confira os saldos físicos caso já tenha movido produtos.")
-                .setNegativeButton("Continuar repondo",null).setPositiveButton("Cancelar") { _,_ ->
+            confirmation=InfoCardDialog.confirm(this,"Cancelar reposição?",
+                "Os itens desta reposição serão descartados do aparelho. Se você já moveu produtos, confira os saldos físicos antes de cancelar.",
+                "Cancelar reposição","Continuar repondo",R.drawable.home_warning) {
                     getSharedPreferences("pending-restocking",MODE_PRIVATE).edit().remove(owner).commit(); vm.reset(); finish()
-                }.show()
+                }
         }
         persist(state)
     }
@@ -296,21 +299,29 @@ class ScannerActivity : AppCompatActivity() {
             val description=requests.joinToString("\n\n") { request ->
                 state.catalog!!.products.first { it.id==request.productId }.label+"\n${request.quantity-request.damages} unidades para a gôndola · ${request.damages} avarias"
             }
-            confirmation=AlertDialog.Builder(this).setTitle("Finalizar reposição?")
-                .setMessage(description+"\n\nConfirme somente depois de repor os produtos fisicamente.")
-                .setNegativeButton("Revisar",null).setPositiveButton("Confirmar e finalizar") { _,_ ->
+            confirmation=InfoCardDialog.confirm(this,"Tudo pronto na gôndola?",
+                "Confira as quantidades abaixo. Ao confirmar, o estoque e o histórico do mercado serão atualizados.",
+                "Confirmar e finalizar","Revisar quantidades",details=description) {
                     if(persist(state.copy(pendingBatch=requests))) vm.finalizeBatch(requests)
                     else vm.error("Não foi possível guardar a confirmação neste aparelho. Tente novamente.")
-                }.show()
+                }
         } catch(_:IllegalArgumentException) { vm.error("Informe o estoque e uma quantidade positiva para cada produto. As avarias devem estar entre zero e o total.") }
     }
     private fun leave() {
         val state=vm.state.value ?: return
         if(state.loading) return
         if(state.step in setOf(ScannerStep.IN_PROGRESS,ScannerStep.CONFIRMING)) {
-            persist(state)
-            confirmation=AlertDialog.Builder(this).setTitle("Continuar depois?").setMessage("A reposição ficará salva neste aparelho. Nenhuma nova movimentação foi registrada.")
-                .setNegativeButton("Continuar aqui",null).setPositiveButton("Voltar") { _,_ -> finish() }.show()
+            if(!persist(state)) {
+                vm.error("Não foi possível salvar o andamento neste aparelho. Tente novamente antes de sair.")
+                return
+            }
+            val pending=state.pendingBatch.isNotEmpty()
+            confirmation=InfoCardDialog.confirm(this,if(pending) "Confirmação em aberto" else "Continue quando quiser",
+                if(pending) "Os dados enviados ficam salvos neste aparelho. Ao voltar, tente novamente para conferir se o mercado recebeu a confirmação."
+                else "Seus produtos e quantidades ficam salvos neste aparelho. Ao voltar, você retoma de onde parou.",
+                "Salvar e sair","Continuar repondo",R.drawable.home_clock,
+                details=if(pending) "Uma tentativa já foi enviada. Confira o registro antes de repetir a reposição física."
+                else "O estoque só será atualizado quando você finalizar a reposição.") { finish() }
         } else finish()
     }
     override fun finish() { super.finish(); UiMotion.close(this) }
