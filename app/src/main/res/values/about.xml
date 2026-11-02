@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <item name="settings_about_content" type="id" />
+    <string name="about_brand">Kairos</string>
+    <string name="about_version">Versão %1$s</string>
+    <string name="about_tagline">Cada produto,\nno momento certo.</string>
+    <string name="about_intro">Mais organização para o mercado. Mais clareza para quem cuida de cada gôndola.</string>
+    <string name="about_routine">Ao seu lado na rotina</string>
+    <string name="about_scan">Um olhar para a gôndola</string>
+    <string name="about_scan_description">Fotografe os produtos e confira as observações da análise antes de agir.</string>
+    <string name="about_restock">Da pendência à reposição</string>
+    <string name="about_restock_description">Acompanhe alertas, organize o que precisa repor e registre o trabalho concluído.</string>
+    <string name="about_assistant">Uma ajuda quando precisar</string>
+    <string name="about_assistant_description">Converse com o assistente Kairos para tirar dúvidas sobre a sua rotina.</string>
+    <string name="about_help">Vamos facilitar seu dia?</string>
+    <string name="about_help_description">Encontre orientações para aproveitar melhor o Kairos.</string>
+    <string name="about_help_action">Explorar a ajuda</string>
+    <string name="about_team">DESENVOLVIDO PELA EQUIPE KAIROS</string>
+    <string name="about_footer">Tecnologia a serviço de quem faz o mercado acontecer.</string>
+</resources>

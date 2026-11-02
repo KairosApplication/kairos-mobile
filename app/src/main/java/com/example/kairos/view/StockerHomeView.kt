@@ -1136,6 +1136,12 @@ class StockerHomeView(
     }
 
     private fun renderSettings() {
+        if (settingsDestination == SettingsDestination.ABOUT) {
+            body.addView(com.example.kairos.view.settings.AboutView(context,scale) {
+                openSettings(SettingsDestination.HELP)
+            },LinearLayout.LayoutParams(-1,-2))
+            return
+        }
         if (settingsDestination in listOf(SettingsDestination.NOTIFICATIONS, SettingsDestination.APPEARANCE, SettingsDestination.HELP)) {
             val uid = user?.uid ?: return
             val preferences = StockerPreferences(context, uid)

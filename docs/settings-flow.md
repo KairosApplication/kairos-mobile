@@ -12,12 +12,12 @@ O título é Ajustes; a aba continua identificada como Ajustes.
 | Preferências | Notificações | Preferências gerais, reposições, atualizações, som e vibração |
 | Preferências | Aparência | Seleção de modo claro, escuro ou automático |
 | Suporte | Ajuda e Suporte | Busca nas perguntas frequentes e acesso a Falar com o suporte |
-| Suporte | Sobre o KAIROS | Template de Sobre |
+| Suporte | Sobre o KAIROS | Identidade do produto, versão instalada, funcionalidades e acesso à ajuda |
 
-O segundo destino de ajuda/suporte é Suporte, correspondente ao futuro chatbot
-do frame `713:2397`. Nesta etapa não há atendimento ou envio de mensagens.
-Suporte e Sobre usam `SettingsTemplateView` com o aviso Em breve; cada destino
-tem uma chave em `SettingsDestination` para receber sua implementação específica.
+O acesso a suporte abre o chatbot. Sobre usa `AboutView`, com o logo existente,
+um painel em verde da marca, cartões que respeitam o tema claro/escuro e a versão
+obtida de `BuildConfig.VERSION_NAME`. O botão Explorar a ajuda abre as perguntas
+frequentes. Essa tela não depende da rede e não lê dados pessoais ou credenciais.
 
 `SettingsContentView` implementa os frames v2 `713:2168`, `713:2333` e `713:2362`,
 reutilizando `AccountUiStyle`. `StockerPreferences` salva escolhas locais por UID.
