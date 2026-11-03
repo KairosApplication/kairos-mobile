@@ -28,7 +28,9 @@ import com.example.kairos.model.home.StockerPreferences
 class SettingsContentView(
     context: Context, scale: Float, destination: SettingsDestination,
     private val preferences: StockerPreferences, busy: Boolean,
-    onThemeChanged: () -> Unit, onSupport: () -> Unit, onAnswer: (String, String) -> Unit
+    onThemeChanged: () -> Unit, onSupport: () -> Unit, onAnswer: (String, String) -> Unit,
+    onTestNotification: (() -> Unit)? = null,
+    onEnableNotifications: (() -> Unit)? = null
 ) : LinearLayout(context) {
     private val s = AccountUiStyle(context, scale)
     init {
@@ -72,7 +74,10 @@ class SettingsContentView(
                 thumbTintList = ColorStateList.valueOf(0xFFEEEEEE.toInt())
                 trackTintList = ColorStateList(arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
                     intArrayOf(context.getColor(R.color.home_green), 0xFF949494.toInt()))
-                setOnCheckedChangeListener { _, checked -> preferences.setEnabled(key, checked) }
+                setOnCheckedChangeListener { _, checked ->
+                    preferences.setEnabled(key, checked)
+                    if(key=="general" && checked) onEnableNotifications?.invoke()
+                }
             }, LayoutParams(-2, -2))
             card.addView(row, LayoutParams(-1, -2))
         }
@@ -89,6 +94,14 @@ class SettingsContentView(
                     toggle(this, "sound", R.string.preference_sound, R.string.preference_sound_description)
                     toggle(this, "vibration", R.string.preference_vibration, R.string.preference_vibration_description)
                 }, LayoutParams(-1, -2))
+                if(onTestNotification!=null) addView(s.card().apply {
+                    setPadding(s.px(20f),s.px(20f),s.px(20f),s.px(20f))
+                    addView(s.label("Confira neste aparelho",18f))
+                    addView(s.label("Envie um aviso local para testar a permissão e o canal de notificações do Kairos. Não é uma mensagem enviada pelo servidor.",14f,s.secondary,400),
+                        LayoutParams(-1,-2).apply { topMargin=s.px(10f) })
+                    addView(com.example.kairos.view.UiKit(context).button("Enviar notificação de teste",true,onTestNotification).apply { isEnabled=!busy },
+                        LayoutParams(-1,-2).apply { topMargin=s.px(18f) })
+                },LayoutParams(-1,-2).apply { topMargin=s.px(20f) })
             }
             SettingsDestination.APPEARANCE -> {
                 heading(R.string.preference_theme)

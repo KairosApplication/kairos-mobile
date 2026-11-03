@@ -67,7 +67,10 @@ class StockerHomeView(
     private val onChat: (() -> Unit)? = null,
     private val onScanner: (() -> Unit)? = null,
     private val onRestock: ((List<RestockingRecord>) -> Unit)? = null,
-    private val onResultBack: (() -> Unit)? = null
+    private val onResultBack: (() -> Unit)? = null,
+    private val onAvatar: (() -> Unit)? = null,
+    private val onTestNotification: (() -> Unit)? = null,
+    private val onEnableNotifications: (() -> Unit)? = null
 ) : FrameLayout(activity) {
     private enum class Tab(val label: Int, val icon: Int, val viewId: Int) {
         START(R.string.home_start, R.drawable.home_house, R.id.home_nav_start),
@@ -231,6 +234,10 @@ class StockerHomeView(
         super.onDraw(canvas)
     }
 
+    fun refreshProfile() { render() }
+    fun openNotificationAlerts(owner: String) {
+        if(user?.uid==owner && !signingOut) select(Tab.ALERTS)
+    }
     fun bind(value: StockerHomeUiState) {
         if (state == value) return
         state = value
@@ -1146,14 +1153,14 @@ class StockerHomeView(
             val uid = user?.uid ?: return
             val preferences = StockerPreferences(context, uid)
             body.addView(SettingsContentView(context, scale, settingsDestination, preferences, signingOut,
-                { preferences.applyTheme(activity) }, { openSettings(SettingsDestination.SUPPORT) }, ::showInfo),
+                { preferences.applyTheme(activity) }, { openSettings(SettingsDestination.SUPPORT) }, ::showInfo,onTestNotification,onEnableNotifications),
                 LinearLayout.LayoutParams(-1, -2))
             return
         }
         if (settingsDestination == SettingsDestination.PROFILE) {
             body.addView(ProfileView(context, scale, user, state.data?.profileWorkSummary, state.data?.isDemo == true,
                 signingOut, if (accountOperation == null) R.string.home_logging_out else R.string.account_saving,
-                sessionMessage, { openSettings(SettingsDestination.SECURITY) }, onLogout), LinearLayout.LayoutParams(-1, -2))
+                sessionMessage, { openSettings(SettingsDestination.SECURITY) }, onLogout,onAvatar), LinearLayout.LayoutParams(-1, -2))
             return
         }
         if (settingsDestination == SettingsDestination.SECURITY) {

@@ -140,7 +140,7 @@ class ChatDialog(private val activity: AppCompatActivity, private val vm: ChatVi
         UiMotion.reveal(body)
         dialog.window?.apply {
             if (android.animation.ValueAnimator.areAnimatorsEnabled()) setWindowAnimations(R.style.KairosDialogMotion)
-            addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE); setLayout(-1, -1)
+            setLayout(-1, -1)
             setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
             statusBarColor = ui.color(R.color.home_surface); navigationBarColor = ui.color(R.color.home_surface)
             setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)

@@ -15,7 +15,8 @@ import com.example.kairos.model.home.ProfileWorkSummary
 
 class ProfileView(
     context: Context, scale: Float, user: SignedInUser?, summary: ProfileWorkSummary?,
-    isDemo: Boolean, busy: Boolean, busyLabel: Int, message: String, onEdit: () -> Unit, onLogout: () -> Unit
+    isDemo: Boolean, busy: Boolean, busyLabel: Int, message: String, onEdit: () -> Unit, onLogout: () -> Unit,
+    onAvatar: (() -> Unit)? = null
 ) : LinearLayout(context) {
     init {
         val s = AccountUiStyle(context, scale)
@@ -31,17 +32,23 @@ class ProfileView(
         }
         val avatar = FrameLayout(context).apply {
             background = s.rounded(0xFFD9D9D9.toInt(), 100f)
-            addView(s.icon(R.drawable.settings_profile), FrameLayout.LayoutParams(s.px(100f), s.px(100f), Gravity.CENTER))
+            val photo=user?.uid?.let { com.example.kairos.model.home.AvatarStore(context).load(it) }
+            if(photo!=null) addView(android.widget.ImageView(context).apply {
+                setImageBitmap(photo);scaleType=android.widget.ImageView.ScaleType.CENTER_CROP
+                background=s.rounded(0xFFD9D9D9.toInt(),100f);clipToOutline=true
+                contentDescription="Foto do perfil"
+            },FrameLayout.LayoutParams(-1,-1))
+            else addView(s.icon(R.drawable.settings_profile), FrameLayout.LayoutParams(s.px(100f), s.px(100f), Gravity.CENTER))
             val edit = FrameLayout(context).apply {
                 id = R.id.account_profile_edit
                 isFocusable = true
                 isEnabled = !busy
-                contentDescription = s.text(R.string.account_edit_profile)
+                contentDescription = if(onAvatar!=null) "Alterar foto do perfil" else s.text(R.string.account_edit_profile)
                 addView(View(context).apply { background = s.rounded(0xFF939C96.toInt(), 50f) },
                     FrameLayout.LayoutParams(s.px(35f), s.px(35f), Gravity.CENTER))
                 addView(s.icon(R.drawable.account_pencil).apply { imageTintList = android.content.res.ColorStateList.valueOf(Color.WHITE) },
                     FrameLayout.LayoutParams(s.px(18f), s.px(18f), Gravity.CENTER))
-                setOnClickListener { if (!busy) onEdit() }
+                setOnClickListener { if (!busy) (onAvatar ?: onEdit).invoke() }
             }
             addView(edit, FrameLayout.LayoutParams(s.px(48f), s.px(48f), Gravity.BOTTOM or Gravity.END).apply {
                 bottomMargin = -s.px(6f); marginEnd = -s.px(6f)
@@ -58,6 +65,8 @@ class ProfileView(
             gravity = Gravity.CENTER; maxLines = 1; ellipsize = TextUtils.TruncateAt.END
         }, FrameLayout.LayoutParams(-1, -2).apply { setMargins(s.px(25f), s.px(177f), s.px(25f), 0) })
         addView(hero, LayoutParams(-1, s.px(230f)))
+        if(onAvatar!=null) addView(com.example.kairos.view.UiKit(context).button("Editar dados da conta",false,onEdit).apply { isEnabled=!busy },
+            LayoutParams(-1,-2).apply { setMargins(s.px(17f),s.px(16f),s.px(18f),0) })
 
         fun countCard(title: Int, value: Int?) = s.card().apply {
             minimumHeight = s.px(104f)

@@ -21,12 +21,14 @@ frequentes. Essa tela não depende da rede e não lê dados pessoais ou credenci
 
 `SettingsContentView` implementa os frames v2 `713:2168`, `713:2333` e `713:2362`,
 reutilizando `AccountUiStyle`. `StockerPreferences` salva escolhas locais por UID.
-Os switches armazenam preferências; o projeto ainda não possui entrega de notificações
-push ou canais Android associados. O tema usa AppCompat DayNight e recursos `values-night`;
+As preferências de notificações controlam avisos locais para novos alertas consultados
+pela API. Há canais Android e teste manual, mas não há push remoto nem consulta
+periódica com o app fechado. Avatar e evidências são descritos em [mobile-evidence.md](mobile-evidence.md).
+O tema usa AppCompat DayNight e recursos `values-night`;
 o modo automático segue o sistema. O tema escuro adapta os tokens existentes, pois
 o Figma disponível mostra apenas o modo claro dessas telas.
-As respostas das perguntas frequentes descrevem o comportamento implementado,
-incluindo a ausência de análise por IA e de reposições reais. Não há envio de mensagens.
+As perguntas frequentes orientam os fluxos de reposição e edição do perfil.
+O chatbot e a análise de fotos dependem dos serviços reais configurados.
 
 O botão Voltar e o retorno do sistema levam Suporte → Ajuda e Suporte →
 Ajustes → Início. As demais telas filhas voltam diretamente a Ajustes.

@@ -24,11 +24,11 @@
     <string name="help_password">Como alterar minha senha?</string>
     <string name="help_problem">Problemas com aplicativo?</string>
     <string name="help_profile">Dúvidas sobre o meu perfil?</string>
-    <string name="help_restock_answer">Consulte as pendências na aba Alertas. Os dados atuais são demonstrativos; a confirmação de reposições depende da integração com o estoque do mercado.</string>
-    <string name="help_scan_answer">O fluxo de verificação de gôndola está em desenvolvimento. A análise automática por foto ainda não está conectada.</string>
+    <string name="help_restock_answer">Abra Alertas, toque no produto e escolha Ver reposição. Selecione pelo menos um produto e toque em Iniciar reposição. Depois de repor fisicamente, informe as quantidades e finalize para atualizar o estoque e o histórico.</string>
+    <string name="help_scan_answer">Na Home, toque em Verificar gôndola, escolha a gôndola e fotografe os produtos. Confira as observações no Resultado da análise. A imagem ajuda na conferência, mas não altera o estoque automaticamente.</string>
     <string name="help_password_answer">Abra Ajustes → Segurança → Senha e toque no ícone de edição. Informe sua senha atual e confirme a nova senha.</string>
-    <string name="help_problem_answer">Confira sua conexão e tente novamente. Para problemas de acesso, use a recuperação de senha na tela de login. O atendimento pelo suporte ainda não está conectado.</string>
-    <string name="help_profile_answer">Abra Ajustes → Perfil para consultar seus dados. Em Segurança, você pode editar nome, e-mail e senha. O resumo de trabalho atual usa dados demonstrativos.</string>
+    <string name="help_problem_answer">Confira a mensagem exibida e tente novamente. Estoque, chatbot e análise de fotos dependem da disponibilidade dos serviços do mercado. Para dúvidas, abra Falar com o suporte e converse com o assistente Kairos. Para recuperar a senha, use a tela de login.</string>
+    <string name="help_profile_answer">Abra Ajustes → Perfil para consultar seus dados e o resumo do trabalho no mercado. Toque no lápis da foto para escolher ou remover o avatar, salvo por conta neste aparelho. Em Editar dados da conta, você pode alterar nome, e-mail e senha.</string>
     <string name="help_no_results">Nenhuma pergunta encontrada.</string>
     <string name="help_contact_heading">Ainda precisa de ajuda?</string>
     <string name="help_contact_agent">Fale com o nosso agente</string>

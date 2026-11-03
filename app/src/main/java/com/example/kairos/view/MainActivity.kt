@@ -38,6 +38,75 @@ class MainActivity : AppCompatActivity() {
     private var chatDialog: ChatDialog? = null
     private var chatOwner: String? = null
     private var businessScope: String? = null
+    private var avatarOwner: String? = null
+    private var notificationOwner: String? = null
+    private var notificationTestPending = false
+    private val notices by lazy { com.example.kairos.model.home.LocalAlertNotifications(this) }
+    private val avatarPicker=registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia()) { uri ->
+        val uid=avatarOwner;avatarOwner=null
+        if(uri!=null && uid!=null && vm.state.value?.user?.uid==uid) {
+            Toast.makeText(this,"Salvando foto…",Toast.LENGTH_SHORT).show()
+            Thread {
+                val result=runCatching {
+                    com.example.kairos.model.home.AvatarStore(applicationContext).save(uid,uri) {
+                        com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid==uid
+                    }
+                }
+                runOnUiThread {
+                    if(!isDestroyed && vm.state.value?.user?.uid==uid) {
+                        if(result.isSuccess) homeView.refreshProfile()
+                        Toast.makeText(this,if(result.isSuccess) "Foto do perfil atualizada" else "Não foi possível salvar. Escolha uma imagem válida de até 20 MB.",Toast.LENGTH_LONG).show()
+                    }
+                }
+            }.start()
+        }
+    }
+    private val notificationPermission=registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { granted ->
+        val uid=notificationOwner;notificationOwner=null
+        if(uid!=null && vm.state.value?.user?.uid==uid) {
+            if(granted && notificationTestPending) sendTestNotification(uid)
+            else if(granted) Toast.makeText(this,"Notificações permitidas neste aparelho.",Toast.LENGTH_SHORT).show()
+            else Toast.makeText(this,"Permita notificações nas configurações do Android para receber o aviso.",Toast.LENGTH_LONG).show()
+        }
+        notificationTestPending=false
+    }
+    private fun sendTestNotification(uid: String) {
+        val sent=notices.test(uid)
+        Toast.makeText(this,if(sent) "Notificação enviada. Abra a barra de notificações para conferir." else "As notificações estão bloqueadas nas configurações do Android.",Toast.LENGTH_LONG).show()
+    }
+    private fun requestTestNotification() = requestNotificationAccess(true)
+    private fun enableNotifications() = requestNotificationAccess(false)
+    private fun requestNotificationAccess(sendTest: Boolean) {
+        val uid=vm.state.value?.user?.uid ?: return
+        if(android.os.Build.VERSION.SDK_INT>=33 && androidx.core.content.ContextCompat.checkSelfPermission(this,android.Manifest.permission.POST_NOTIFICATIONS)!=android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            notificationOwner=uid;notificationTestPending=sendTest;notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        } else if(sendTest) sendTestNotification(uid)
+    }
+    private fun editAvatar() {
+        val uid=vm.state.value?.user?.uid ?: return
+        val ui=UiKit(this)
+        val panel=InfoCardDialog.panel(this,1f)
+        panel.addView(ui.text("Sua foto no Kairos",22f,true))
+        panel.addView(ui.text("Escolha uma foto da galeria. Ela ficará salva somente neste aparelho, para esta conta.",14f,muted=true),LinearLayout.LayoutParams(-1,-2).apply { topMargin=ui.dp(12) })
+        lateinit var dialog: androidx.appcompat.app.AlertDialog
+        panel.addView(ui.button("Escolher foto",true) {
+            dialog.dismiss()
+            if(vm.state.value?.user?.uid==uid) {
+                avatarOwner=uid
+                avatarPicker.launch(androidx.activity.result.PickVisualMediaRequest(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly))
+            }
+        },LinearLayout.LayoutParams(-1,-2).apply { topMargin=ui.dp(24) })
+        panel.addView(ui.button("Remover foto") {
+            dialog.dismiss()
+            if(vm.state.value?.user?.uid==uid) {
+                val removed=runCatching { com.example.kairos.model.home.AvatarStore(this).remove(uid) }.isSuccess
+                if(removed) homeView.refreshProfile()
+                else Toast.makeText(this,"Não foi possível remover a foto.",Toast.LENGTH_LONG).show()
+            }
+        },LinearLayout.LayoutParams(-1,-2).apply { topMargin=ui.dp(10) })
+        panel.addView(ui.button("Voltar") { dialog.dismiss() },LinearLayout.LayoutParams(-1,-2).apply { topMargin=ui.dp(10) })
+        dialog=InfoCardDialog.present(this,1f,panel)
+    }
     private val scannerResult = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == RESULT_OK) vm.state.value?.user?.let { homeVm.load(it.uid, force = true) }
     }
@@ -68,6 +137,9 @@ class MainActivity : AppCompatActivity() {
         installSplashScreen()
         com.example.kairos.model.home.StockerPreferences.restoreTheme(this)
         super.onCreate(savedInstanceState)
+        avatarOwner=savedInstanceState?.getString("avatarOwner")
+        notificationOwner=savedInstanceState?.getString("notificationOwner")
+        notificationTestPending=savedInstanceState?.getBoolean("notificationTestPending",false) ?: false
         businessScope = savedInstanceState?.getString("businessScope")
         chatOwner = savedInstanceState?.getString("chatOwner")
         splashCompleted = savedInstanceState?.getBoolean("splashCompleted", false) ?: false
@@ -100,7 +172,7 @@ class MainActivity : AppCompatActivity() {
                     .putExtra("restockShelfId", records.first().shelfCode.toLong())
                     .putExtra("restockProductIds", records.mapNotNull { it.productId }.toLongArray()))
                 UiMotion.open(this)
-            }).apply { visibility = View.GONE }
+            },onAvatar=::editAvatar,onTestNotification=::requestTestNotification,onEnableNotifications=::enableNotifications).apply { visibility = View.GONE }
         root.addView(homeView, FrameLayout.LayoutParams(-1, -1))
         loadingView = LoadingView(this).apply { visibility = View.GONE }
         root.addView(loadingView, FrameLayout.LayoutParams(-1, -1))
@@ -120,6 +192,7 @@ class MainActivity : AppCompatActivity() {
         homeView.restore(savedInstanceState?.getBundle("home"))
         homeVm.state.observe(this) {
             homeView.bind(it)
+            if(!it.loading) it.data?.let { data -> vm.state.value?.user?.uid?.let { uid -> notices.observe(uid,data) } }
             if (it.httpStatus == 401 || it.httpStatus == 403) {
                 homeVm.reset()
                 vm.businessAccessInterrupted()
@@ -185,6 +258,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString("avatarOwner",avatarOwner)
+        outState.putString("notificationOwner",notificationOwner)
+        outState.putBoolean("notificationTestPending",notificationTestPending)
         outState.putString("businessScope", businessScope)
         outState.putString("chatOwner", chatOwner)
         outState.putBundle("authEntry", authEntry.save())
@@ -197,6 +273,15 @@ class MainActivity : AppCompatActivity() {
                 .forEach { (key, field) -> putString(key, field.text.toString()) }
         })
         super.onSaveInstanceState(outState)
+    }
+
+    override fun onNewIntent(newIntent: android.content.Intent) {
+        super.onNewIntent(newIntent)
+        setIntent(newIntent)
+        if(::vm.isInitialized && vm.state.value?.screen==AuthScreen.HOME && newIntent.action=="com.example.kairos.OPEN_ALERTS") {
+            newIntent.getStringExtra("notificationOwner")?.let(homeView::openNotificationAlerts)
+            newIntent.action=null
+        }
     }
 
     private fun showOnboarding(root: FrameLayout) {
@@ -359,6 +444,10 @@ class MainActivity : AppCompatActivity() {
             fields.clear()
             controls.clear()
             homeView.updateSession(state.user, state.loading, state.message, state.accountOperation, state.accountOperationSucceeded)
+            if(intent.action=="com.example.kairos.OPEN_ALERTS") {
+                intent.getStringExtra("notificationOwner")?.let(homeView::openNotificationAlerts)
+                intent.action=null
+            }
             state.user?.let { homeVm.load(it.uid) }
             return
         }
