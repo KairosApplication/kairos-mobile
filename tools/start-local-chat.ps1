@@ -1,3 +1,4 @@
+param([switch]$Restart)
 $ErrorActionPreference='Stop'
 $runtime=Join-Path (Split-Path $PSScriptRoot -Parent) '.integration'
 $providerFile=Join-Path $runtime 'secrets/groq.env'
@@ -8,13 +9,10 @@ if(Test-Path -LiteralPath $providerFile) {
         }
     }
 }
-$docker='D:\KairosRuntime\DockerDesktop\resources\bin\docker.exe'
-if(-not(Test-Path $docker)) { $docker=(Get-Command docker -ErrorAction Stop).Source }
-& $docker --context desktop-linux compose -f (Join-Path $PSScriptRoot 'chat-local.compose.yaml') up -d
-if($LASTEXITCODE -ne 0) { throw 'Não foi possível iniciar o MongoDB local. Verifique o Docker Desktop.' }
-$python=Join-Path $runtime 'kairos-inteligencia-artificial/.venv/Scripts/python.exe'
-& $python -c "from pymongo import MongoClient; d=MongoClient('mongodb://127.0.0.1:27018',serverSelectionTimeoutMS=30000)['kairos_chat_local']; names=['conversations','user_memory','feedback','agent_traces','guardrail_events','judge_evaluations','rag_chunks','ai_executions','rag_documents']; [d.create_collection(n) for n in names if n not in d.list_collection_names()]; d.conversations.create_index([('user_id',1),('updated_at',-1)])"
-if($LASTEXITCODE -ne 0) { throw 'MongoDB local ainda não está pronto. Aguarde e tente novamente.' }
+$atlasFile=Join-Path $runtime 'secrets/mongodb-atlas.json'
+if(-not(Test-Path -LiteralPath $atlasFile)) { throw 'Configure .integration/secrets/mongodb-atlas.json no servidor. Não há fallback para MongoDB local.' }
+try { $atlas=Get-Content -LiteralPath $atlasFile -Raw | ConvertFrom-Json } catch { throw 'Configuração privada do MongoDB Atlas inválida.' }
+if($atlas.uri -notmatch '^mongodb\+srv://' -or $atlas.database -ne 'kairos_ai') { throw 'Configure a URI SRV do Atlas e o banco kairos_ai.' }
 $secretPath=Join-Path $runtime 'secrets/chat-runtime.json'
 if(-not(Test-Path $secretPath)) {
     $bytes=New-Object byte[] 48
@@ -24,12 +22,25 @@ if(-not(Test-Path $secretPath)) {
 $env:API_ACCESS_TOKEN=(Get-Content $secretPath -Raw | ConvertFrom-Json).apiToken
 $env:API_PORT='8082'
 $env:SERVER_ADDRESS='127.0.0.1'
-$env:MONGODB_URI='mongodb://127.0.0.1:27018/kairos_chat_local'
-$env:MONGODB_DATABASE='kairos_chat_local'
+$env:MONGODB_URI=$atlas.uri
+$env:MONGODB_DATABASE=$atlas.database
 $env:APP_MONGODB_WRITES_ENABLED='true'
 $env:APP_MONGODB_VERIFY_ON_STARTUP='true'
 $java='C:\Program Files\Android\Android Studio\jbr\bin\java.exe'
 $jar=Join-Path $runtime 'kairos-api-ia/target/kairos-api-mongodb-0.0.1-SNAPSHOT.jar'
+if($Restart) {
+    foreach($service in @(@{Port=8000;Pattern='-m\s+uvicorn\s+api:app'},@{Port=8082;Pattern=[regex]::Escape($jar)})) {
+        $listeners=@(Get-NetTCPConnection -LocalPort $service.Port -State Listen -ErrorAction SilentlyContinue)
+        foreach($listener in $listeners) {
+            $process=Get-CimInstance Win32_Process -Filter "ProcessId=$($listener.OwningProcess)"
+            if(-not $process -or $process.CommandLine -notmatch $service.Pattern) { throw 'Uma porta está ocupada por outro processo. O serviço não foi interrompido.' }
+            Stop-Process -Id $listener.OwningProcess -ErrorAction Stop
+        }
+    }
+}
+elseif(Get-NetTCPConnection -LocalPort 8082 -State Listen -ErrorAction SilentlyContinue) {
+    throw 'A API de persistência já está em execução. Execute tools/start-local-chat.ps1 -Restart para aplicar a configuração Atlas.'
+}
 if(-not(Get-NetTCPConnection -LocalPort 8082 -State Listen -ErrorAction SilentlyContinue)) {
  Start-Process $java -ArgumentList @('-jar',('"'+$jar+'"')) -WorkingDirectory (Split-Path $jar -Parent) -WindowStyle Hidden -RedirectStandardOutput (Join-Path $runtime 'mongo-api.log') -RedirectStandardError (Join-Path $runtime 'mongo-api-error.log')
 }
@@ -48,5 +59,14 @@ $python=Join-Path $runtime 'kairos-inteligencia-artificial/.venv/Scripts/python.
 if(-not(Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue)) {
  Start-Process $python -ArgumentList @('-m','uvicorn','api:app','--host','127.0.0.1','--port','8000') -WorkingDirectory (Join-Path $runtime 'kairos-inteligencia-artificial') -WindowStyle Hidden -RedirectStandardOutput (Join-Path $runtime 'chat-api.log') -RedirectStandardError (Join-Path $runtime 'chat-api-error.log')
 }
-Write-Output 'Serviços de conversas iniciados; consulte os health checks para confirmar.'
+foreach($endpoint in @('http://127.0.0.1:8082/health','http://127.0.0.1:8000/health')) {
+    $ready=$false
+    $deadline=(Get-Date).AddSeconds(30)
+    while((Get-Date) -lt $deadline) {
+        try { if((Invoke-WebRequest -Uri $endpoint -TimeoutSec 2).StatusCode -eq 200) { $ready=$true; break } } catch { }
+        Start-Sleep -Milliseconds 250
+    }
+    if(-not $ready) { throw 'Um serviço não confirmou saúde. Consulte os logs privados em .integration; nenhum fallback local foi ativado.' }
+}
+Write-Output 'Chat e persistência saudáveis, usando MongoDB Atlas (kairos_ai), sem fallback local.'
 

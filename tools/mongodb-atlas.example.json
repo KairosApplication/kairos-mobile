@@ -1,0 +1,4 @@
+{
+  "uri": "mongodb+srv://USUARIO:SENHA@SEU-CLUSTER.mongodb.net/kairos_ai",
+  "database": "kairos_ai"
+}

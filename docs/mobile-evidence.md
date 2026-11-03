@@ -24,6 +24,8 @@ tela vazia e os testes com repositórios fictícios não são essa evidência.
 
 O serviço já teve validação completa com Groq, HTTP 200, resposta aprovada e
 pergunta/resposta persistidas, conforme o registro em `service-integration.md`.
+O destino atual das conversas é MongoDB Atlas, banco `kairos_ai`, pela API de
+persistência. Detalhes da correção e configuração em [chat-atlas.md](chat-atlas.md).
 Não incluir credenciais, dados pessoais de terceiros ou mensagens privadas nas evidências.
 
 ## Notificações Android locais
