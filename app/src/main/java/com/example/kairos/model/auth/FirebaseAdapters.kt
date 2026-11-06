@@ -66,16 +66,6 @@ class FirebaseAuthGateway(private val auth: FirebaseAuth) : AuthGateway {
         }
     }
 
-    override fun sendResetLink(email: String) = translate {
-        try {
-            auth.sendPasswordResetEmail(email).resultInWorker()
-        } catch (e: FirebaseAuthException) {
-            // Mantém resposta genérica também em projetos sem proteção contra enumeração.
-            if (e.errorCode != "ERROR_USER_NOT_FOUND") throw e
-        }
-        Unit
-    }
-
     override fun signOut() = auth.signOut()
 
     override fun currentUid() = auth.currentUser?.uid

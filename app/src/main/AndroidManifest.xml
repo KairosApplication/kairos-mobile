@@ -6,6 +6,7 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
     <application
+        android:name=".KairosApplication"
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
@@ -15,6 +16,8 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Kairos">
         <activity android:name=".view.ScannerActivity" android:exported="false" />
+        <activity android:name=".view.ReceiptScannerActivity" android:exported="false" />
+        <activity android:name=".view.DamageReportActivity" android:exported="false" />
         <activity android:name=".view.ShelfCameraActivity" android:exported="false" />
         <activity
             android:name=".view.MainActivity"

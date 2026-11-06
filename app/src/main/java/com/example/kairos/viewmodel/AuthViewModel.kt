@@ -8,7 +8,7 @@ import com.example.kairos.model.auth.*
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
-enum class AuthScreen { LOGIN, LOADING, REGISTER, RECOVERY, COMPLETE_PROFILE, BUSINESS_ACCESS, HOME }
+enum class AuthScreen { LOGIN, LOADING, REGISTER, COMPLETE_PROFILE, BUSINESS_ACCESS, HOME, CUSTOMER_HOME }
 
 data class AuthUiState(
     val screen: AuthScreen = AuthScreen.LOGIN,
@@ -30,7 +30,7 @@ class AuthViewModel(private val repository: AuthRepository?) : ViewModel() {
 
     init {
         if (repository == null) {
-            mutableState.value = AuthUiState(message = "Firebase não configurado. Adicione o google-services.json do Kairos e sincronize o Gradle.")
+            mutableState.value = AuthUiState(message = "Não foi possível configurar o acesso aos serviços do Kairos.")
         } else {
             run { it.restoreSession()?.let(::authenticated) ?: AuthUiState() }
         }
@@ -38,17 +38,18 @@ class AuthViewModel(private val repository: AuthRepository?) : ViewModel() {
 
     private fun authenticated(user: SignedInUser) = AuthUiState(
         screen = when {
-            user.profile == null -> AuthScreen.COMPLETE_PROFILE
+            user.profile == null && user.business?.apiAuthenticated != true -> AuthScreen.COMPLETE_PROFILE
+            user.business?.isCustomer == true -> AuthScreen.CUSTOMER_HOME
             user.business?.canRestock != true -> AuthScreen.BUSINESS_ACCESS
             else -> AuthScreen.HOME
         },
         user = user,
-        message = if (user.profile == null) "Complete os dados para concluir seu cadastro." else user.businessIssue.orEmpty()
+        message = if (user.profile == null && user.business?.apiAuthenticated != true) "Complete os dados para concluir seu cadastro." else user.businessIssue.orEmpty()
     )
 
     fun navigate(screen: AuthScreen) {
         if (mutableState.value?.loading == true) return
-        if (screen !in listOf(AuthScreen.LOGIN, AuthScreen.REGISTER, AuthScreen.RECOVERY)) return
+        if (screen !in listOf(AuthScreen.LOGIN, AuthScreen.REGISTER)) return
         if (mutableState.value?.user != null) { logout(); return }
         mutableState.value = AuthUiState(screen)
     }
@@ -72,11 +73,14 @@ class AuthViewModel(private val repository: AuthRepository?) : ViewModel() {
             var succeeded = false
             val result = try {
                 action(repository ?: throw IllegalArgumentException(
-                    "Adicione app/google-services.json para com.example.kairos e sincronize o Gradle.")).also { succeeded = true }
+                    "Confira a configuração dos serviços do Kairos.")).also { succeeded = true }
             } catch (e: AccountChangedException) {
                 AuthUiState(message = e.message.orEmpty())
             } catch (e: com.example.kairos.model.network.ApiFailure) {
-                if (e.status == 401 && previous.user != null) {
+                if(e.status == 401 && previous.user?.business?.apiAuthenticated == true) {
+                    repository?.invalidateSession()
+                    AuthUiState(message="Sua sessão expirou. Entre novamente.")
+                } else if (e.status == 401 && previous.user != null) {
                     previous.copy(screen = AuthScreen.BUSINESS_ACCESS,
                         user = previous.user.copy(business = null, businessIssue = "Vamos verificar novamente sua conexão com o mercado."),
                         message = "Vamos verificar novamente sua conexão com o mercado.")
@@ -106,6 +110,12 @@ class AuthViewModel(private val repository: AuthRepository?) : ViewModel() {
         authenticated(it.register(request))
     }
 
+    fun registerCustomerAccount(request: CustomerRegistration, confirmation: String) = run {
+        require(request.password == confirmation) { "As senhas não coincidem." }
+        request.validate()
+        authenticated(it.registerCustomerAccount(request))
+    }
+
     fun registerAccount(email: String, password: String, confirmation: String, acceptedTerms: Boolean) = run {
         require(password == confirmation) { "As senhas não coincidem." }
         authenticated(it.registerAccount(email, password))
@@ -126,6 +136,13 @@ class AuthViewModel(private val repository: AuthRepository?) : ViewModel() {
     fun businessAccessInterrupted() {
         val previous = mutableState.value ?: return
         val user = previous.user ?: return
+        if(user.business?.apiAuthenticated == true) {
+            run {
+                it.invalidateSession()
+                AuthUiState(message="Sua sessão expirou. Entre novamente.")
+            }
+            return
+        }
         val notice = "Não conseguimos confirmar o acesso ao mercado. Toque abaixo para verificar novamente."
         mutableState.value = previous.copy(screen = AuthScreen.BUSINESS_ACCESS, loading = false,
             user = user.copy(business = null, businessIssue = notice), message = notice)
@@ -134,16 +151,9 @@ class AuthViewModel(private val repository: AuthRepository?) : ViewModel() {
     fun linkBusiness(password: String) = run { authenticated(it.linkBusinessAccount(password)) }
     fun registerCustomer() = run { authenticated(it.registerCustomer()) }
 
-    fun requestResetLink(email: String) = run {
-        it.requestPasswordReset(email)
-        AuthUiState(AuthScreen.RECOVERY, message =
-            "Se houver uma conta elegível para esse email, você receberá um link para redefinir a senha. " +
-            "Confira também o spam. Após alterar a senha, volte ao login.")
-    }
-
     fun logout() = run {
-        it.logout()
-        AuthUiState()
+        val notice = runCatching { it.logout() }.exceptionOrNull()?.message.orEmpty()
+        AuthUiState(message = notice)
     }
 
     fun editAccount(request: AccountEditRequest) = run(accountOperation = request.operation) {
@@ -164,7 +174,7 @@ class AuthViewModel(private val repository: AuthRepository?) : ViewModel() {
 
     fun refreshAccount() {
         val previous = mutableState.value ?: return
-        if (previous.screen != AuthScreen.HOME || previous.loading) return
+        if (previous.screen !in setOf(AuthScreen.HOME,AuthScreen.CUSTOMER_HOME) || previous.loading) return
         run(accountOperation = AccountOperation.REFRESH) {
             val updated = it.restoreSession() ?: throw AccountChangedException()
             authenticated(updated).copy(message = if (previous.user?.email != updated.email)

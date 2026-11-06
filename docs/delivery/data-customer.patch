@@ -1,0 +1,42 @@
+diff --git a/docs/customer-mobile.md b/docs/customer-mobile.md
+new file mode 100644
+index 0000000..ffb6943
+--- /dev/null
++++ b/docs/customer-mobile.md
+@@ -0,0 +1,36 @@
++# Fluxo mobile do cliente
++
++As migrações executáveis são mantidas pelo Flyway do repositório
++`KairosApplication/kairos-springboot`, não por uma segunda cópia manual do DDL:
++
++- `V5__firebase_mobile_identity.sql`: UID Firebase → usuário SQL, tentativas de
++  vínculo e comandos de reposição idempotentes.
++- `V6__customer_receipts_reports_favorites.sql`: favoritos, associação de notas
++  confirmadas às compras existentes, ofertas, reportes e limite de chamadas IA.
++
++V5/V6 partem da main com V4 (DAU). Se um ambiente já tiver migrações locais
++desconhecidas com esses números, interromper e reconciliar o histórico. Não usar
++`repair`, renumerar à força ou executar SQL diretamente em produção.
++
++`customer_damage_reports` é a ocorrência. O trigger BEFORE INSERT
++`customer_damage_alert` valida empresa/produto/localização e insere exatamente um
++registro em `alerts`, associando seu ID ao reporte na mesma transação. A constraint
++UNIQUE(customer_id, command_id) e a serialização do serviço permitem reenvio seguro.
++Nenhuma tabela de estoque ou reposição é escrita por esse trigger.
++
++Relatos sem localização ficam visíveis à gerência da empresa, para triagem.
++Relatos com gôndola são visíveis ao repositor atribuído diretamente ou ao corredor
++e à gerência da mesma empresa. A resolução atualiza alerts; o cliente consulta o
++status por seu próprio reporte. Não há push: Android atualiza enquanto ativo.
++
++`customer_receipts` referencia `purchases`/`purchase_products`; source é sempre
++CUSTOMER_CONFIRMED. A chave tem deduplicação por empresa e não prova autenticidade
++fiscal. Itens podem ter sido transcritos por IA, mas são selecionados e confirmados
++pelo cliente. Nenhum CPF ou imagem fiscal é persistido nesses registros.
++As quantidades continuam inteiras, respeitando o modelo existente de compras.
++Não chamar complete_purchase para essa importação: registrar histórico pessoal
++não é uma venda nem autorização para movimentar estoque.
++
++O teste CustomerPostgresIntegrationTest do backend sobe PostgreSQL 17 descartável,
++aplica V1–V6 e verifica deduplicação, escopo, rollback do trigger, acompanhamento,
++favoritos e a consulta de recomendações existente. Nada é aplicado remotamente.

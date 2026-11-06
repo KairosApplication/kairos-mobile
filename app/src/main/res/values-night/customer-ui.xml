@@ -1,0 +1,3 @@
+<resources>
+    <color name="customer_background">@color/home_background_bottom</color>
+</resources>

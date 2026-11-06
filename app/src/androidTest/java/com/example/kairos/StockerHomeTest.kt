@@ -14,6 +14,7 @@ import androidx.test.espresso.action.ViewActions.click
 import androidx.test.espresso.matcher.ViewMatchers.withId
 import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.espresso.matcher.RootMatchers.isPlatformPopup
+import androidx.test.espresso.matcher.RootMatchers.isDialog
 import org.hamcrest.Matchers.equalTo
 import androidx.lifecycle.ViewModelStore
 import androidx.core.view.ViewCompat
@@ -42,6 +43,23 @@ import java.util.concurrent.ThreadPoolExecutor
 
 @RunWith(AndroidJUnit4::class)
 class StockerHomeTest {
+    private fun clickDialogButton() = object:androidx.test.espresso.ViewAction {
+        override fun getDescription() = "Click the native button after the dialog transition"
+        override fun getConstraints():org.hamcrest.Matcher<View> = androidx.test.espresso.matcher.ViewMatchers.isAssignableFrom(android.widget.Button::class.java)
+        override fun perform(controller:androidx.test.espresso.UiController,view:View) {
+            controller.loopMainThreadForAtLeast(300)
+            assertTrue(view.performClick())
+            controller.loopMainThreadUntilIdle()
+        }
+    }
+    private fun openSpinner() = object:androidx.test.espresso.ViewAction {
+        override fun getDescription() = "Open the actual spinner popup after the dialog transition"
+        override fun getConstraints():org.hamcrest.Matcher<View> = androidx.test.espresso.matcher.ViewMatchers.isAssignableFrom(android.widget.Spinner::class.java)
+        override fun perform(controller:androidx.test.espresso.UiController,view:View) {
+            assertTrue((view as android.widget.Spinner).performClick())
+            controller.loopMainThreadForAtLeast(250)
+        }
+    }
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private fun demoUser(uid: String = "demo") = SignedInUser(uid, "$uid@example.com", UserProfile(
         uid, "João", "Silva", LocalDate.of(1990, 1, 1), "", "$uid@example.com", "", ""
@@ -140,19 +158,19 @@ class StockerHomeTest {
                 home.findViewById<View>(R.id.history_filter).performClick()
             }
             captureDialog("history-filters")
-            onView(withId(R.id.history_period)).perform(click())
+            onView(withId(R.id.history_period)).inRoot(isDialog()).perform(openSpinner())
             onData(equalTo("Ontem")).inRoot(isPlatformPopup()).perform(click())
-            onView(withId(R.id.history_cancel_action)).perform(click())
+            onView(withId(R.id.history_cancel_action)).inRoot(isDialog()).perform(clickDialogButton())
             scenario.onActivity {
                 assertEquals("ALL", home.save().getString("historyPeriod"))
                 assertEquals("agua", home.findViewById<EditText>(R.id.history_search).text.toString())
                 home.findViewById<View>(R.id.history_filter).performClick()
             }
-            onView(withId(R.id.history_period)).perform(click())
+            onView(withId(R.id.history_period)).inRoot(isDialog()).perform(openSpinner())
             onData(equalTo("Ontem")).inRoot(isPlatformPopup()).perform(click())
-            onView(withId(R.id.history_shelf)).perform(click())
+            onView(withId(R.id.history_shelf)).inRoot(isDialog()).perform(openSpinner())
             onData(equalTo("C03")).inRoot(isPlatformPopup()).perform(click())
-            onView(withText("Aplicar")).perform(click())
+            onView(withText("Aplicar")).inRoot(isDialog()).perform(clickDialogButton())
             instrumentation.waitForIdleSync()
             capture("history-filtered-preview.png", home)
             scenario.onActivity {
@@ -175,7 +193,7 @@ class StockerHomeTest {
                 assertTrue(texts(home).any { it.text.toString().startsWith("Nenhuma reposição encontrada") })
                 home.findViewById<View>(R.id.history_filter).performClick()
             }
-            onView(withText("Limpar filtros")).perform(click())
+            onView(withText("Limpar filtros")).inRoot(isDialog()).perform(clickDialogButton())
             scenario.onActivity { activity ->
                 assertEquals("", home.findViewById<EditText>(R.id.history_search).text.toString())
                 assertFalse(home.findViewById<View>(R.id.history_filter).isSelected)
@@ -243,7 +261,7 @@ class StockerHomeTest {
                 assertTrue(retry)
                 val empty = DemoStockerHomeRepository().load("demo").copy(priorities = emptyList())
                 home.bind(StockerHomeUiState(data = empty))
-                assertTrue(texts(home).any { it.text.toString() == "Nenhuma prioridade no momento." })
+                assertTrue(texts(home).any { it.text.toString() == "Tudo em dia por aqui" })
             }
         }
     }
@@ -261,13 +279,13 @@ class StockerHomeTest {
                 home.findViewById<EditText>(R.id.history_search).setText("agua")
                 home.findViewById<View>(R.id.history_filter).performClick()
             }
-            onView(withId(R.id.history_period)).perform(click())
+            onView(withId(R.id.history_period)).inRoot(isDialog()).perform(openSpinner())
             onData(equalTo("Ontem")).inRoot(isPlatformPopup()).perform(click())
-            onView(withId(R.id.history_shelf)).perform(click())
+            onView(withId(R.id.history_shelf)).inRoot(isDialog()).perform(openSpinner())
             onData(equalTo("C03")).inRoot(isPlatformPopup()).perform(click())
-            onView(withId(R.id.history_order)).perform(click())
+            onView(withId(R.id.history_order)).inRoot(isDialog()).perform(openSpinner())
             onData(equalTo("Mais antigas primeiro")).inRoot(isPlatformPopup()).perform(click())
-            onView(withText("Aplicar")).perform(click())
+            onView(withText("Aplicar")).inRoot(isDialog()).perform(clickDialogButton())
             scenario.onActivity { activity ->
                 val saved = home.save()
                 assertEquals("account-a", saved.getString("ownerUid"))
@@ -415,7 +433,7 @@ class StockerHomeTest {
             instrumentation.runOnMainSync { vm.load("demo") }
             assertTrue(failed.await(5, TimeUnit.SECONDS))
             instrumentation.runOnMainSync {
-                assertEquals(StockerHomeUiState(failed = true), vm.state.value)
+                assertEquals(StockerHomeUiState(failed = true, message = "Não foi possível carregar os dados. Tente novamente."), vm.state.value)
                 vm.load("demo", force = true)
             }
             assertTrue(loaded.await(5, TimeUnit.SECONDS))
@@ -424,7 +442,7 @@ class StockerHomeTest {
                 assertEquals(listOf(
                     StockerHomeUiState(),
                     StockerHomeUiState(loading = true),
-                    StockerHomeUiState(failed = true),
+                    StockerHomeUiState(failed = true, message = "Não foi possível carregar os dados. Tente novamente."),
                     StockerHomeUiState(loading = true),
                     vm.state.value
                 ), states)

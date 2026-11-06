@@ -71,11 +71,6 @@ class FirebaseAuthRepository(
         return session(identity)
     }
 
-    override fun requestPasswordReset(email: String) {
-        AuthValidation.email(email)
-        auth.sendResetLink(email)
-    }
-
     override fun logout() = auth.signOut()
 
     override fun linkBusinessAccount(password: String): SignedInUser {

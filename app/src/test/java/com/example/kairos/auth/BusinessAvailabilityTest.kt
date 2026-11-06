@@ -13,7 +13,6 @@ class BusinessAvailabilityTest {
             override fun current() = AuthIdentity(profile.uid, profile.email, false)
             override fun signIn(email: String, password: String) = current()
             override fun create(email: String, password: String) = error("Unused")
-            override fun sendResetLink(email: String) = Unit
             override fun signOut() = Unit
         }
         val profiles = object : ProfileStore {

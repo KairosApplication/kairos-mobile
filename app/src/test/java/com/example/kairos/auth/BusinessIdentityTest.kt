@@ -26,7 +26,6 @@ class BusinessIdentityTest {
             override fun create(email: String, password: String) = error("unused")
             override fun signIn(email: String, password: String) = current()
             override fun current() = AuthIdentity("uid", "test@example.com", false)
-            override fun sendResetLink(email: String) = Unit
             override fun signOut() = Unit
         }
         val profiles = object : ProfileStore {
@@ -51,7 +50,6 @@ class BusinessIdentityTest {
             override fun signIn(email: String, password: String) = current()
             override fun current() = AuthIdentity(currentUid, "test@example.com")
             override fun currentUid() = currentUid
-            override fun sendResetLink(email: String) = Unit
             override fun signOut() = Unit
         }
         val profiles = object : ProfileStore {

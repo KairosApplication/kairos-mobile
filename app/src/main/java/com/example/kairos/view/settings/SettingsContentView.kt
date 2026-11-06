@@ -28,7 +28,8 @@ import com.example.kairos.model.home.StockerPreferences
 class SettingsContentView(
     context: Context, scale: Float, destination: SettingsDestination,
     private val preferences: StockerPreferences, busy: Boolean,
-    onThemeChanged: () -> Unit, onSupport: () -> Unit, onAnswer: (String, String) -> Unit
+    onThemeChanged: () -> Unit, onSupport: () -> Unit, onAnswer: (String, String) -> Unit,
+    isCustomer: Boolean = false, showSupport: Boolean = true
 ) : LinearLayout(context) {
     private val s = AccountUiStyle(context, scale)
     init {
@@ -59,7 +60,7 @@ class SettingsContentView(
             row.addView(SwitchCompat(context).apply {
                 id = when (key) {
                     "general" -> R.id.preference_general
-                    "restocking" -> R.id.preference_restocking
+                    "restocking", "customer_activity" -> R.id.preference_restocking
                     "updates" -> R.id.preference_updates
                     "sound" -> R.id.preference_sound
                     else -> R.id.preference_vibration
@@ -81,7 +82,8 @@ class SettingsContentView(
                 heading(R.string.settings_preferences)
                 addView(s.card().apply {
                     toggle(this, "general", R.string.preference_general, R.string.preference_general_description, false)
-                    toggle(this, "restocking", R.string.preference_restocking, R.string.preference_restocking_description)
+                    if(isCustomer) toggle(this,"customer_activity",R.string.customer_activity_notifications,R.string.customer_activity_notifications_description)
+                    else toggle(this, "restocking", R.string.preference_restocking, R.string.preference_restocking_description)
                     toggle(this, "updates", R.string.preference_updates, R.string.preference_updates_description)
                 }, LayoutParams(-1, -2))
                 heading(R.string.preference_channels, 20f)
@@ -161,7 +163,13 @@ class SettingsContentView(
                 heading(R.string.help_faq, 15f)
                 val list = s.card().apply { setPadding(0, s.px(10f), 0, s.px(10f)) }
                 addView(list, LayoutParams(-1, -2))
-                val questions = listOf(
+                val questions = if(isCustomer) listOf(
+                    R.string.customer_help_scan to R.string.customer_help_scan_answer,
+                    R.string.customer_help_favorites to R.string.customer_help_favorites_answer,
+                    R.string.customer_help_reports to R.string.customer_help_reports_answer,
+                    R.string.help_password to R.string.customer_help_password_answer,
+                    R.string.help_profile to R.string.customer_help_profile_answer
+                ) else listOf(
                     R.string.help_restock to R.string.help_restock_answer,
                     R.string.help_scan to R.string.help_scan_answer,
                     R.string.help_password to R.string.help_password_answer,
@@ -193,7 +201,7 @@ class SettingsContentView(
                     override fun onTextChanged(value: CharSequence?, start: Int, before: Int, count: Int) { results(value?.toString().orEmpty()) }
                     override fun afterTextChanged(value: Editable?) = Unit
                 })
-                addView(LinearLayout(context).apply {
+                if(showSupport) addView(LinearLayout(context).apply {
                     orientation = VERTICAL
                     gravity = Gravity.CENTER_HORIZONTAL
                     setPadding(s.px(24f), s.px(20f), s.px(24f), s.px(20f))

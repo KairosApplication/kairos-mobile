@@ -7,7 +7,6 @@ interface AuthGateway {
     fun create(email: String, password: String): AuthIdentity
     fun signIn(email: String, password: String): AuthIdentity
     fun current(): AuthIdentity?
-    fun sendResetLink(email: String)
     fun signOut()
     fun currentUid(): String? = current()?.uid
     fun refreshToken() = Unit

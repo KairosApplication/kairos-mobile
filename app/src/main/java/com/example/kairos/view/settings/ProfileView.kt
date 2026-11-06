@@ -13,12 +13,16 @@ import com.example.kairos.model.auth.AccountValidation
 import com.example.kairos.model.auth.SignedInUser
 import com.example.kairos.model.home.ProfileWorkSummary
 
+data class CustomerProfileSummary(val favorites:Int?,val purchases:Int?)
+
 class ProfileView(
     context: Context, scale: Float, user: SignedInUser?, summary: ProfileWorkSummary?,
-    isDemo: Boolean, busy: Boolean, busyLabel: Int, message: String, onEdit: () -> Unit, onLogout: () -> Unit
+    isDemo: Boolean, busy: Boolean, busyLabel: Int, message: String, onEdit: () -> Unit, onLogout: () -> Unit,
+    customerSummary:CustomerProfileSummary?=null
 ) : LinearLayout(context) {
     init {
         val s = AccountUiStyle(context, scale)
+        val isCustomer=customerSummary!=null || user?.business?.role=="CUSTOMER"
         orientation = VERTICAL
         id = R.id.account_profile_summary
         val name = AccountValidation.fullName(user).ifBlank { s.text(R.string.account_not_informed) }
@@ -28,20 +32,22 @@ class ProfileView(
                 val radius = s.px(24f).toFloat()
                 cornerRadii = floatArrayOf(0f, 0f, 0f, 0f, radius, radius, radius, radius)
             }
+            if(isCustomer) background=s.rounded(s.surface,24f,context.getColor(R.color.home_border))
         }
         val avatar = FrameLayout(context).apply {
-            background = s.rounded(0xFFD9D9D9.toInt(), 100f)
+            background = s.rounded(if(isCustomer) context.getColor(R.color.home_subtle_tile) else 0xFFD9D9D9.toInt(), 100f)
             addView(s.icon(R.drawable.settings_profile), FrameLayout.LayoutParams(s.px(100f), s.px(100f), Gravity.CENTER))
             val edit = FrameLayout(context).apply {
                 id = R.id.account_profile_edit
                 isFocusable = true
-                isEnabled = !busy
+                isEnabled = !busy && user?.business?.apiAuthenticated != true
+                if(isCustomer && user?.business?.apiAuthenticated==true) visibility=View.GONE
                 contentDescription = s.text(R.string.account_edit_profile)
                 addView(View(context).apply { background = s.rounded(0xFF939C96.toInt(), 50f) },
                     FrameLayout.LayoutParams(s.px(35f), s.px(35f), Gravity.CENTER))
                 addView(s.icon(R.drawable.account_pencil).apply { imageTintList = android.content.res.ColorStateList.valueOf(Color.WHITE) },
                     FrameLayout.LayoutParams(s.px(18f), s.px(18f), Gravity.CENTER))
-                setOnClickListener { if (!busy) onEdit() }
+                setOnClickListener { if (!busy && user?.business?.apiAuthenticated != true) onEdit() }
             }
             addView(edit, FrameLayout.LayoutParams(s.px(48f), s.px(48f), Gravity.BOTTOM or Gravity.END).apply {
                 bottomMargin = -s.px(6f); marginEnd = -s.px(6f)
@@ -51,13 +57,16 @@ class ProfileView(
         hero.addView(avatar, FrameLayout.LayoutParams(s.px(136f), s.px(136f), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply {
             topMargin = s.px(3f)
         })
-        hero.addView(s.label(name, 18f, Color.WHITE).apply {
+        hero.addView(s.label(if(isCustomer && name==s.text(R.string.account_not_informed)) "Cliente Kairos" else name,
+            18f, if(isCustomer) s.ink else Color.WHITE).apply {
             gravity = Gravity.CENTER; maxLines = 1; ellipsize = TextUtils.TruncateAt.END
         }, FrameLayout.LayoutParams(-1, -2).apply { setMargins(s.px(25f), s.px(154f), s.px(25f), 0) })
-        hero.addView(s.label(user?.email.orEmpty(), 16f, Color.WHITE, 400).apply {
+        hero.addView(s.label(user?.email.orEmpty(), 16f, if(isCustomer) s.secondary else Color.WHITE, 400).apply {
             gravity = Gravity.CENTER; maxLines = 1; ellipsize = TextUtils.TruncateAt.END
         }, FrameLayout.LayoutParams(-1, -2).apply { setMargins(s.px(25f), s.px(177f), s.px(25f), 0) })
-        addView(hero, LayoutParams(-1, s.px(230f)))
+        addView(hero, LayoutParams(-1, s.px(230f)).apply {
+            if(isCustomer) setMargins(s.px(20f),s.px(20f),s.px(20f),0)
+        })
 
         fun countCard(title: Int, value: Int?) = s.card().apply {
             minimumHeight = s.px(104f)
@@ -66,13 +75,15 @@ class ProfileView(
             addView(LinearLayout(context).apply {
                 gravity = Gravity.CENTER_VERTICAL
                 addView(s.label(value?.toString() ?: s.text(R.string.account_unavailable_count), 40f, s.ink))
-                addView(s.label(s.text(R.string.home_week), 15f, s.secondary, 500),
+                if(!isCustomer) addView(s.label(s.text(R.string.home_week), 15f, s.secondary, 500),
                     LayoutParams(-2, -2).apply { marginStart = s.px(14f) })
             })
         }
         addView(LinearLayout(context).apply {
-            addView(countCard(R.string.account_restocks, summary?.restocksThisWeek), LayoutParams(0, -2, 1f).apply { marginEnd = s.px(16f) })
-            addView(countCard(R.string.account_damages, summary?.damagesThisWeek), LayoutParams(0, -2, 1f))
+            addView(countCard(if(isCustomer) R.string.customer_favorites else R.string.account_restocks,
+                if(isCustomer) customerSummary?.favorites else summary?.restocksThisWeek), LayoutParams(0, -2, 1f).apply { marginEnd = s.px(16f) })
+            addView(countCard(if(isCustomer) R.string.customer_purchases else R.string.account_damages,
+                if(isCustomer) customerSummary?.purchases else summary?.damagesThisWeek), LayoutParams(0, -2, 1f))
         }, LayoutParams(-1, -2).apply { setMargins(s.px(17f), s.px(16f), s.px(17f), 0) })
         val details = s.card().apply {
             minimumHeight = s.px(264f)
@@ -86,8 +97,10 @@ class ProfileView(
             }, LayoutParams(-1, -2).apply { topMargin = s.px(top) })
         }
         field(R.string.account_name_label, name, 0f)
-        field(R.string.account_role, summary?.role ?: s.text(R.string.account_not_informed), 38f)
-        field(R.string.account_market, summary?.market ?: s.text(R.string.account_not_informed), 38f)
+        field(if(isCustomer) R.string.customer_account_type else R.string.account_role,
+            if(isCustomer) s.text(R.string.customer_role) else summary?.role ?: s.text(R.string.account_not_informed), 38f)
+        field(R.string.account_market, (summary?.market ?: user?.business?.companyName)?.takeIf { it.isNotBlank() }
+            ?: s.text(R.string.account_not_informed), 38f)
         addView(details, LayoutParams(-1, -2).apply { setMargins(s.px(17f), s.px(18f), s.px(18f), 0) })
         val logout = LinearLayout(context).apply {
             id = R.id.home_logout

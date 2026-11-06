@@ -9,6 +9,7 @@ import androidx.appcompat.app.AppCompatActivity
 class AccountTestActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         enableEdgeToEdge()
         setContentView(FrameLayout(this))
     }

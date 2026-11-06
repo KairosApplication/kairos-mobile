@@ -51,4 +51,5 @@ data class StockerHomeData(
 /** Blocking reads run outside the UI thread. The API adapter will implement this contract. */
 fun interface StockerHomeRepository {
     fun load(userId: String): StockerHomeData
+    fun resolveAlert(userId:String,id:String) { throw UnsupportedOperationException("Resolução indisponível") }
 }

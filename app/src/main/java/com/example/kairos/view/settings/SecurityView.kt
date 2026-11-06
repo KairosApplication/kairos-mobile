@@ -26,7 +26,7 @@ class SecurityView(context: Context, scale: Float, user: SignedInUser?, busy: Bo
         }
         fun row(title: Int, value: String, icon: Int, iconSize: Float, top: Float,
                 field: AccountEditField? = null, actionId: Int = View.NO_ID) {
-            val action = field?.let { { if (!busy) onEdit(it) } }
+            val action = field?.takeIf { user?.business?.apiAuthenticated != true }?.let { { if (!busy) onEdit(it) } }
             val row = s.card(action).apply {
                 orientation = HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
@@ -44,7 +44,7 @@ class SecurityView(context: Context, scale: Float, user: SignedInUser?, busy: Bo
                 addView(s.label(s.text(title), 17f, context.getColor(R.color.home_heading), 500))
                 addView(s.label(value, 16f), LayoutParams(-1, -2).apply { topMargin = s.px(2f) })
             }, LayoutParams(0, -2, 1f).apply { marginStart = s.px(17f) })
-            if (field != null) row.addView(androidx.appcompat.widget.AppCompatImageButton(context).apply {
+            if (field != null && user?.business?.apiAuthenticated != true) row.addView(androidx.appcompat.widget.AppCompatImageButton(context).apply {
                 id = actionId
                 contentDescription = s.text(when (field) {
                     AccountEditField.NAME -> R.string.account_edit_name
@@ -60,6 +60,9 @@ class SecurityView(context: Context, scale: Float, user: SignedInUser?, busy: Bo
             addView(row, LayoutParams(-1, -2).apply { setMargins(s.px(21f), s.px(top), s.px(19f), 0) })
         }
         heading(R.string.account_data, 21f)
+        if(user?.business?.apiAuthenticated == true) addView(s.label(
+            "Por enquanto, os dados de acesso estão disponíveis somente para consulta.",15f,s.secondary,500),
+            LayoutParams(-1,-2).apply { setMargins(s.px(21f),s.px(12f),s.px(21f),0) })
         row(R.string.account_full_name, AccountValidation.fullName(user).ifBlank { s.text(R.string.account_not_informed) },
             R.drawable.settings_profile, 40f, 13f, AccountEditField.NAME, R.id.account_edit_name)
         row(R.string.account_cpf, AccountValidation.maskCpf(user?.profile?.cpf) ?: s.text(R.string.account_not_informed),

@@ -1,0 +1,512 @@
+--- a/src/main/java/com/kairos/kairosapipostgres/config/SecurityConfig.java
++++ b/src/main/java/com/kairos/kairosapipostgres/config/SecurityConfig.java
+@@ -94,6 +94,8 @@
+                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/refresh", "/api/v1/auth/logout").permitAll()
+                         .requestMatchers(HttpMethod.GET, "/api/v1/auth/me").authenticated()
+                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/chat-context").authenticated()
++                        .requestMatchers(HttpMethod.GET, "/api/v1/customer/damage-reports/**").hasRole("CUSTOMER")
++                        .requestMatchers(HttpMethod.POST, "/api/v1/customer/damage-reports").hasRole("CUSTOMER")
+ 
+                         .requestMatchers(HttpMethod.GET, "/api/v1/store-map").hasRole("MANAGER")
+ 
+--- /dev/null
++++ b/src/main/java/com/kairos/kairosapipostgres/controller/CustomerDamageReportController.java
+@@ -0,0 +1,43 @@
++package com.kairos.kairosapipostgres.controller;
++
++import com.kairos.kairosapipostgres.dto.request.CustomerDamageReportRequest;
++import com.kairos.kairosapipostgres.service.CustomerDamageReportService;
++import jakarta.validation.Valid;
++import org.springframework.http.CacheControl;
++import org.springframework.http.ResponseEntity;
++import org.springframework.security.core.Authentication;
++import org.springframework.web.bind.annotation.*;
++
++@RestController
++@RequestMapping("/api/v1/customer/damage-reports")
++public class CustomerDamageReportController {
++    private final CustomerDamageReportService service;
++
++    public CustomerDamageReportController(CustomerDamageReportService service) {
++        this.service = service;
++    }
++
++    private <T> ResponseEntity<T> ok(T value) {
++        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(value);
++    }
++
++    @GetMapping("/capabilities")
++    public ResponseEntity<?> capabilities(Authentication auth) {
++        return ok(service.capabilities(auth));
++    }
++
++    @GetMapping("/options")
++    public ResponseEntity<?> options(Authentication auth) {
++        return ok(service.options(auth));
++    }
++
++    @GetMapping
++    public ResponseEntity<?> list(Authentication auth) {
++        return ok(service.list(auth));
++    }
++
++    @PostMapping
++    public ResponseEntity<?> report(Authentication auth, @Valid @RequestBody CustomerDamageReportRequest request) {
++        return ok(service.report(auth, request));
++    }
++}
+--- /dev/null
++++ b/src/main/java/com/kairos/kairosapipostgres/dto/request/CustomerDamageReportRequest.java
+@@ -0,0 +1,13 @@
++package com.kairos.kairosapipostgres.dto.request;
++
++import jakarta.validation.constraints.*;
++import java.util.UUID;
++
++public record CustomerDamageReportRequest(
++        @NotNull UUID commandId,
++        @NotNull @Positive Long productId,
++        @Positive Long shelfId,
++        @NotBlank @Pattern(regexp = "DAMAGED|TAMPERED|EXPIRED|OTHER") String problemType,
++        @NotNull @Size(max = 500) String description,
++        @Size(max = 4194304) String imageBase64) {
++}
+--- /dev/null
++++ b/src/main/java/com/kairos/kairosapipostgres/service/CustomerDamageReportService.java
+@@ -0,0 +1,200 @@
++package com.kairos.kairosapipostgres.service;
++
++import com.kairos.kairosapipostgres.dto.request.CustomerDamageReportRequest;
++import org.springframework.dao.DataIntegrityViolationException;
++import org.springframework.http.HttpStatus;
++import org.springframework.jdbc.core.JdbcTemplate;
++import org.springframework.security.core.Authentication;
++import org.springframework.stereotype.Service;
++import org.springframework.transaction.annotation.Transactional;
++import org.springframework.web.server.ResponseStatusException;
++
++import javax.imageio.ImageIO;
++import java.io.ByteArrayInputStream;
++import java.io.ByteArrayOutputStream;
++import java.io.DataOutputStream;
++import java.security.MessageDigest;
++import java.util.*;
++
++@Service
++public class CustomerDamageReportService {
++    private final JdbcTemplate db;
++
++    public CustomerDamageReportService(JdbcTemplate db) {
++        this.db = db;
++    }
++
++    private record Actor(long customerId, long companyId, String companyName) { }
++
++    private Actor actor(Authentication auth) {
++        if (auth == null || !auth.isAuthenticated() || auth.getAuthorities().stream()
++                .noneMatch(role -> role.getAuthority().equals("ROLE_CUSTOMER"))) {
++            throw new ResponseStatusException(HttpStatus.FORBIDDEN);
++        }
++        var rows = db.queryForList("""
++                SELECT c.id,c.company_id,co.name FROM customers c JOIN users u ON u.id=c.users_id
++                JOIN companies co ON co.id=c.company_id WHERE u.email=?
++                """, auth.getName());
++        if (rows.size() != 1) {
++            throw new ResponseStatusException(HttpStatus.FORBIDDEN);
++        }
++        var row = rows.getFirst();
++        return new Actor(number(row, "id"), number(row, "company_id"), row.get("name").toString());
++    }
++
++    private static long number(Map<String, Object> row, String key) {
++        return ((Number) row.get(key)).longValue();
++    }
++
++    @Transactional(readOnly = true)
++    public Map<String, Object> capabilities(Authentication auth) {
++        var owner = actor(auth);
++        return Map.of("version", 1, "photoAvailable", true, "companyId", owner.companyId(),
++                "companyName", owner.companyName());
++    }
++
++    @Transactional(readOnly = true)
++    public Map<String, Object> options(Authentication auth) {
++        var owner = actor(auth);
++        var products = db.queryForList("""
++                SELECT id,name,COALESCE(brand,'') brand FROM products
++                WHERE company_id=? ORDER BY name,id LIMIT 1001
++                """, owner.companyId());
++        boolean truncated = products.size() > 1000;
++        if (truncated) {
++            products = new ArrayList<>(products.subList(0, 1000));
++        }
++        var locations = db.queryForList("""
++                SELECT ps.product_id,sh.id shelf_id,a.position aisle,s.name sector
++                FROM product_shelves ps JOIN products p ON p.id=ps.product_id
++                JOIN shelves sh ON sh.id=ps.shelf_id JOIN aisles a ON a.id=sh.aisle_id
++                JOIN sectors s ON s.id=a.sector_id
++                WHERE p.company_id=? AND s.company_id=?
++                ORDER BY ps.product_id,sh.id LIMIT 10001
++                """, owner.companyId(), owner.companyId());
++        boolean locationsTruncated = locations.size() > 10000;
++        if (locationsTruncated) {
++            locations = new ArrayList<>(locations.subList(0, 10000));
++        }
++        return Map.of("companyId", owner.companyId(), "companyName", owner.companyName(),
++                "products", products, "locations", locations, "catalogTruncated", truncated,
++                "locationsTruncated", locationsTruncated, "photoAvailable", true);
++    }
++
++    @Transactional(readOnly = true)
++    public List<Map<String, Object>> list(Authentication auth) {
++        var owner = actor(auth);
++        return db.queryForList("""
++                SELECT r.id,r.product_id,p.name,r.problem_type,r.description,a.status,
++                CAST(r.created_at AS varchar) created_at,CAST(a.resolution_date AS varchar) resolution_date,
++                (r.photo IS NOT NULL) has_photo
++                FROM customer_damage_reports r JOIN products p ON p.id=r.product_id
++                JOIN alerts a ON a.id=r.alert_id
++                WHERE r.customer_id=? AND r.company_id=? ORDER BY r.created_at DESC,r.id DESC LIMIT 100
++                """, owner.customerId(), owner.companyId());
++    }
++
++    @Transactional
++    public Map<String, Object> report(Authentication auth, CustomerDamageReportRequest request) {
++        var owner = actor(auth);
++        byte[] photo = photo(request.imageBase64());
++        String fingerprint = fingerprint(request, photo);
++        // Serialize retries for the same customer across all API instances.
++        db.queryForList("SELECT id FROM customers WHERE id=? FOR UPDATE", owner.customerId());
++        var previous = db.queryForList("""
++                SELECT r.id,r.fingerprint,a.status,r.alert_id FROM customer_damage_reports r
++                JOIN alerts a ON a.id=r.alert_id WHERE r.customer_id=? AND r.command_id=?
++                """, owner.customerId(), request.commandId());
++        if (!previous.isEmpty()) {
++            var row = previous.getFirst();
++            if (!fingerprint.equals(row.get("fingerprint"))) {
++                throw new ResponseStatusException(HttpStatus.CONFLICT, "Comando ja utilizado com dados diferentes");
++            }
++            return confirmation(row);
++        }
++        if (db.queryForList("SELECT id FROM products WHERE id=? AND company_id=?",
++                request.productId(), owner.companyId()).isEmpty()) {
++            throw new ResponseStatusException(HttpStatus.FORBIDDEN);
++        }
++        UUID protocol = UUID.randomUUID();
++        try {
++            db.update("""
++                    INSERT INTO customer_damage_reports
++                    (id,command_id,customer_id,company_id,product_id,shelf_id,problem_type,description,photo,fingerprint)
++                    VALUES (?,?,?,?,?,?,?,?,?,?)
++                    """, protocol, request.commandId(), owner.customerId(), owner.companyId(),
++                    request.productId(), request.shelfId(), request.problemType(), request.description().trim(), photo, fingerprint);
++        } catch (DataIntegrityViolationException error) {
++            throw new ResponseStatusException(HttpStatus.CONFLICT,
++                    "Nao foi possivel encaminhar o relato. Confira a gondola e o repositor responsavel.");
++        }
++        return confirmation(db.queryForMap("""
++                SELECT r.id,r.alert_id,a.status FROM customer_damage_reports r
++                JOIN alerts a ON a.id=r.alert_id WHERE r.id=?
++                """, protocol));
++    }
++
++    private static Map<String, Object> confirmation(Map<String, Object> row) {
++        return Map.of("protocol", row.get("id").toString(), "status", row.get("status"), "alertId", row.get("alert_id"));
++    }
++
++    private static String fingerprint(CustomerDamageReportRequest request, byte[] photo) {
++        try {
++            var bytes = new ByteArrayOutputStream();
++            try (var data = new DataOutputStream(bytes)) {
++                data.writeLong(request.productId());
++                data.writeLong(request.shelfId() == null ? 0 : request.shelfId());
++                data.writeUTF(request.problemType());
++                data.writeUTF(request.description().trim());
++                if (photo != null) {
++                    data.write(photo);
++                }
++            }
++            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes.toByteArray()));
++        } catch (java.io.IOException | java.security.NoSuchAlgorithmException error) {
++            throw new IllegalStateException("Unable to fingerprint report", error);
++        }
++    }
++
++    private static byte[] photo(String encoded) {
++        if (encoded == null) {
++            return null;
++        }
++        if (encoded.isBlank() || encoded.length() > 4194304) {
++            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Foto JPEG invalida");
++        }
++        try {
++            byte[] original = Base64.getDecoder().decode(encoded);
++            if (original.length < 2 || original.length > 3145728) {
++                throw new IllegalArgumentException();
++            }
++            try (var stream = ImageIO.createImageInputStream(new ByteArrayInputStream(original))) {
++                var readers = ImageIO.getImageReaders(stream);
++                if (!readers.hasNext()) {
++                    throw new IllegalArgumentException();
++                }
++                var reader = readers.next();
++                try {
++                    reader.setInput(stream);
++                    if (!reader.getFormatName().equalsIgnoreCase("JPEG")
++                            || (long) reader.getWidth(0) * reader.getHeight(0) > 4000000) {
++                        throw new IllegalArgumentException();
++                    }
++                    var image = reader.read(0);
++                    try (var output = new ByteArrayOutputStream()) {
++                        if (!ImageIO.write(image, "jpeg", output) || output.size() > 3145728) {
++                            throw new IllegalArgumentException();
++                        }
++                        return output.toByteArray();
++                    } finally {
++                        image.flush();
++                    }
++                } finally {
++                    reader.dispose();
++                }
++            }
++        } catch (java.io.IOException | IllegalArgumentException error) {
++            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Foto JPEG invalida");
++        }
++    }
++}
+--- /dev/null
++++ b/src/main/resources/db/migration/V5__customer_damage_reports.sql
+@@ -0,0 +1,47 @@
++CREATE TABLE customer_damage_reports (
++    id uuid PRIMARY KEY,
++    command_id uuid NOT NULL,
++    customer_id integer NOT NULL REFERENCES customers(id),
++    company_id integer NOT NULL REFERENCES companies(id),
++    product_id integer NOT NULL REFERENCES products(id),
++    shelf_id integer REFERENCES shelves(id),
++    problem_type varchar(30) NOT NULL CHECK (problem_type IN ('DAMAGED','TAMPERED','EXPIRED','OTHER')),
++    description varchar(500) NOT NULL DEFAULT '',
++    photo bytea CHECK (photo IS NULL OR octet_length(photo) <= 3145728),
++    fingerprint varchar(64) NOT NULL,
++    created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
++    alert_id integer NOT NULL UNIQUE REFERENCES alerts(id),
++    UNIQUE (customer_id,command_id)
++);
++CREATE INDEX customer_damage_reports_owner ON customer_damage_reports(customer_id,created_at DESC);
++
++CREATE FUNCTION create_customer_damage_alert() RETURNS trigger LANGUAGE plpgsql AS $$
++DECLARE target_shelf integer; target_employee integer;
++BEGIN
++    IF NOT EXISTS (SELECT 1 FROM customers WHERE id=NEW.customer_id AND company_id=NEW.company_id)
++       OR NOT EXISTS (SELECT 1 FROM products WHERE id=NEW.product_id AND company_id=NEW.company_id)
++    THEN RAISE EXCEPTION 'Customer report scope mismatch' USING ERRCODE='23514'; END IF;
++
++    SELECT sh.id,e.id INTO target_shelf,target_employee
++    FROM product_shelves ps JOIN shelves sh ON sh.id=ps.shelf_id
++    JOIN aisles a ON a.id=sh.aisle_id JOIN sectors s ON s.id=a.sector_id
++    JOIN employees e ON e.company_id=s.company_id AND e.position='STOCKER'
++    WHERE ps.product_id=NEW.product_id AND s.company_id=NEW.company_id
++      AND (NEW.shelf_id IS NULL OR sh.id=NEW.shelf_id)
++      AND (EXISTS (SELECT 1 FROM shelf_employees se WHERE se.shelf_id=sh.id AND se.employee_id=e.id)
++        OR EXISTS (SELECT 1 FROM employee_aisles ea WHERE ea.aisle_id=a.id AND ea.employee_id=e.id))
++    ORDER BY CASE WHEN EXISTS (SELECT 1 FROM shelf_employees se
++        WHERE se.shelf_id=sh.id AND se.employee_id=e.id) THEN 0 ELSE 1 END,sh.id,e.id LIMIT 1;
++
++    IF target_employee IS NULL THEN
++        RAISE EXCEPTION 'No assigned stocker for this product/location' USING ERRCODE='23514';
++    END IF;
++    INSERT INTO alerts(stockout_date,employee_id,shelf_id,product_id,description,status)
++    VALUES (CURRENT_DATE,target_employee,target_shelf,NEW.product_id,
++        LEFT('Relato de cliente - ' || NEW.problem_type || ': ' ||
++            CASE WHEN NEW.shelf_id IS NULL THEN '[Local nao informado] ' ELSE '' END ||
++            NEW.description,250),'OPEN') RETURNING id INTO NEW.alert_id;
++    RETURN NEW;
++END $$;
++CREATE TRIGGER customer_damage_alert BEFORE INSERT ON customer_damage_reports
++FOR EACH ROW EXECUTE FUNCTION create_customer_damage_alert();
+--- /dev/null
++++ b/src/test/java/com/kairos/kairosapipostgres/CustomerDamageReportPostgresTest.java
+@@ -0,0 +1,183 @@
++package com.kairos.kairosapipostgres;
++
++import com.kairos.kairosapipostgres.dto.request.CustomerDamageReportRequest;
++import com.kairos.kairosapipostgres.service.CustomerDamageReportService;
++import org.flywaydb.core.Flyway;
++import org.junit.jupiter.api.*;
++import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
++import org.springframework.jdbc.core.JdbcTemplate;
++import org.springframework.jdbc.datasource.DataSourceTransactionManager;
++import org.springframework.jdbc.datasource.DriverManagerDataSource;
++import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
++import org.springframework.security.core.Authentication;
++import org.springframework.security.core.authority.SimpleGrantedAuthority;
++import org.springframework.transaction.support.TransactionTemplate;
++import org.springframework.web.server.ResponseStatusException;
++
++import java.awt.image.BufferedImage;
++import java.io.ByteArrayOutputStream;
++import java.sql.Connection;
++import java.sql.DriverManager;
++import java.util.*;
++import java.util.concurrent.*;
++import javax.imageio.ImageIO;
++
++import static org.assertj.core.api.Assertions.*;
++
++@EnabledIfSystemProperty(named = "integration.database", matches = "postgresql")
++class CustomerDamageReportPostgresTest {
++    private static Connection keepAlive;
++    private static JdbcTemplate db;
++    private static TransactionTemplate tx;
++    private static CustomerDamageReportService service;
++    private final Authentication customer = auth("customer1@invalid", "CUSTOMER");
++
++    private static Authentication auth(String email, String role) {
++        return new UsernamePasswordAuthenticationToken(email, null, List.of(new SimpleGrantedAuthority("ROLE_" + role)));
++    }
++
++    @BeforeAll
++    static void database() throws Exception {
++        String url = "jdbc:tc:postgresql:17-alpine:///kairos_customer_reports";
++        keepAlive = DriverManager.getConnection(url, "test", "test");
++        Flyway.configure().dataSource(url, "test", "test").load().migrate();
++        var source = new DriverManagerDataSource(url, "test", "test");
++        db = new JdbcTemplate(source);
++        tx = new TransactionTemplate(new DataSourceTransactionManager(source));
++        service = new CustomerDamageReportService(db);
++    }
++
++    @AfterAll
++    static void close() throws Exception {
++        if (keepAlive != null) {
++            keepAlive.close();
++        }
++    }
++
++    @BeforeEach
++    void fixtures() {
++        db.execute("TRUNCATE companies,users CASCADE");
++        db.execute("""
++                INSERT INTO companies VALUES
++                (1,'Test A','00000000000001','a@invalid','BASIC'),(2,'Test B','00000000000002','b@invalid','BASIC');
++                INSERT INTO users(id,name,last_name,birth_date,cpf,email,password) VALUES
++                (1,'Client','A','2000-01-01','00000000001','customer1@invalid','not-a-login'),
++                (2,'Stocker','A','2000-01-01','00000000002','stocker1@invalid','not-a-login'),
++                (3,'Client','B','2000-01-01','00000000003','customer2@invalid','not-a-login'),
++                (4,'Stocker','B','2000-01-01','00000000004','stocker2@invalid','not-a-login'),
++                (5,'Other','A','2000-01-01','00000000005','other@invalid','not-a-login');
++                INSERT INTO customers(id,users_id,company_id) VALUES (1,1,1),(2,3,2),(3,5,1);
++                INSERT INTO employees(id,users_id,company_id,position) VALUES (1,2,1,'STOCKER'),(2,4,2,'STOCKER');
++                INSERT INTO sectors(id,company_id,name,type) VALUES (1,1,'A','NORMAL'),(2,2,'B','NORMAL');
++                INSERT INTO aisles(id,sector_id,position) VALUES (1,1,1),(2,2,1);
++                INSERT INTO shelves(id,aisle_id,maximum_capacity) VALUES (1,1,100),(2,2,100);
++                INSERT INTO products(id,company_id,name) VALUES (1,1,'Test product A'),(2,2,'Test product B');
++                INSERT INTO product_shelves(product_id,shelf_id,product_quantity) VALUES (1,1,7),(2,2,9);
++                INSERT INTO shelf_employees(shelf_id,employee_id) VALUES (1,1),(2,2),(1,2);
++                """);
++    }
++
++    private CustomerDamageReportRequest request(UUID command, Long shelf, String description, String image) {
++        return new CustomerDamageReportRequest(command, 1L, shelf, "DAMAGED", description, image);
++    }
++
++    private Map<String, Object> send(CustomerDamageReportRequest request) {
++        return tx.execute(status -> service.report(customer, request));
++    }
++
++    private int count(String table) {
++        return db.queryForObject("SELECT COUNT(*) FROM " + table, Integer.class);
++    }
++
++    @Test
++    void createsExactlyOneAlertAndLeavesStockUntouchedOnRetry() {
++        UUID command = UUID.randomUUID();
++        var first = send(request(command, 1L, "Broken package", null));
++        assertThat(send(request(command, 1L, "Broken package", null))).isEqualTo(first);
++        assertThat(count("alerts")).isEqualTo(1);
++        assertThat(count("customer_damage_reports")).isEqualTo(1);
++        assertThat(count("restockings")).isZero();
++        assertThat(db.queryForObject("SELECT product_quantity FROM product_shelves WHERE product_id=1", Integer.class)).isEqualTo(7);
++        assertThat(db.queryForObject("SELECT employee_id FROM alerts", Integer.class)).isEqualTo(1);
++        assertThatThrownBy(() -> send(request(command, 1L, "Different content", null)))
++                .isInstanceOf(ResponseStatusException.class);
++        assertThat(count("alerts")).isEqualTo(1);
++    }
++
++    @Test
++    void concurrentRetriesAcrossTransactionsHaveTheSameProtocol() throws Exception {
++        var request = request(UUID.randomUUID(), 1L, "Concurrent retry", null);
++        try (var pool = Executors.newFixedThreadPool(4)) {
++            var start = new CountDownLatch(1);
++            List<Future<Map<String, Object>>> results = new ArrayList<>();
++            for (int index = 0; index < 4; index++) {
++                results.add(pool.submit(() -> {
++                    start.await();
++                    return send(request);
++                }));
++            }
++            start.countDown();
++            Set<Object> protocols = new HashSet<>();
++            for (var result : results) {
++                protocols.add(result.get(15, TimeUnit.SECONDS).get("protocol"));
++            }
++            assertThat(protocols).hasSize(1);
++            assertThat(count("alerts")).isEqualTo(1);
++        }
++    }
++
++    @Test
++    void deniesForeignProductForeignShelfAndNonCustomerRole() {
++        assertThatThrownBy(() -> tx.execute(status -> service.report(customer,
++                new CustomerDamageReportRequest(UUID.randomUUID(), 2L, null, "DAMAGED", "", null))))
++                .isInstanceOf(ResponseStatusException.class);
++        assertThatThrownBy(() -> send(request(UUID.randomUUID(), 2L, "", null)))
++                .isInstanceOf(ResponseStatusException.class);
++        assertThatThrownBy(() -> tx.execute(status -> service.report(auth("stocker1@invalid", "EMPLOYEE"),
++                request(UUID.randomUUID(), 1L, "", null)))).isInstanceOf(ResponseStatusException.class);
++        assertThat(count("alerts")).isZero();
++        assertThat(count("customer_damage_reports")).isZero();
++    }
++
++    @Test
++    void missingLocationUsesValidProductShelfAndDoesNotClaimAnObservedLocation() {
++        send(request(UUID.randomUUID(), null, "Problem", null));
++        assertThat(db.queryForObject("SELECT shelf_id FROM alerts", Integer.class)).isEqualTo(1);
++        assertThat(db.queryForObject("SELECT description FROM alerts", String.class)).contains("Local nao informado");
++        assertThat(db.queryForObject("SELECT shelf_id FROM customer_damage_reports", Integer.class)).isNull();
++    }
++
++    @Test
++    void noResponsibleStockerRollsBackBothReportAndAlert() {
++        db.update("DELETE FROM shelf_employees WHERE employee_id=1");
++        assertThatThrownBy(() -> send(request(UUID.randomUUID(), null, "Problem", null)))
++                .isInstanceOf(ResponseStatusException.class);
++        assertThat(count("alerts")).isZero();
++        assertThat(count("customer_damage_reports")).isZero();
++    }
++
++    @Test
++    void customerSeesOnlyOwnReportsAndTracksActualAlertResolution() {
++        var confirmation = send(request(UUID.randomUUID(), 1L, "Problem", null));
++        db.update("UPDATE alerts SET status='RESOLVED',resolution_date=CURRENT_TIMESTAMP WHERE id=?", confirmation.get("alertId"));
++        assertThat(service.list(customer)).hasSize(1);
++        assertThat(service.list(customer).getFirst().get("status")).isEqualTo("RESOLVED");
++        assertThat(service.list(auth("other@invalid", "CUSTOMER"))).isEmpty();
++        assertThat(service.list(auth("customer2@invalid", "CUSTOMER"))).isEmpty();
++        assertThat(service.options(customer).get("products").toString()).doesNotContain("Test product B");
++    }
++
++    @Test
++    void acceptsRealJpegAndRejectsInvalidPhotoWithoutWritingAnything() throws Exception {
++        assertThatThrownBy(() -> send(request(UUID.randomUUID(), 1L, "Problem", "bm90LWEtcGhvdG8=")))
++                .isInstanceOf(ResponseStatusException.class);
++        assertThat(count("alerts")).isZero();
++        var image = new BufferedImage(80, 40, BufferedImage.TYPE_INT_RGB);
++        var output = new ByteArrayOutputStream();
++        ImageIO.write(image, "jpeg", output);
++        var request = request(UUID.randomUUID(), 1L, "Photo", Base64.getEncoder().encodeToString(output.toByteArray()));
++        var first = send(request);
++        assertThat(send(request)).isEqualTo(first);
++        assertThat(db.queryForObject("SELECT octet_length(photo) FROM customer_damage_reports", Integer.class)).isPositive();
++    }
++}

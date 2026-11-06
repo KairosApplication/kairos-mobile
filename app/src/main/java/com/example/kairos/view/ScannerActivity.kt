@@ -18,7 +18,7 @@ import com.example.kairos.R
 import com.example.kairos.model.scanner.*
 import com.example.kairos.model.home.*
 import com.example.kairos.viewmodel.*
-import com.google.firebase.auth.FirebaseAuth
+import com.example.kairos.model.network.ApiDependencies
 import org.json.JSONObject
 import org.json.JSONArray
 import java.io.File
@@ -37,9 +37,6 @@ class ScannerActivity : AppCompatActivity() {
     private var renderedPhase: String? = null
     private data class Entry(var inventory: Long? = null, var quantity: String = "", var damages: String = "0")
     private val entries = linkedMapOf<Long, Entry>()
-    private val authListener = FirebaseAuth.AuthStateListener { auth ->
-        if (owner != null && auth.currentUser?.uid != owner) { confirmation?.dismiss(); resultView.close(); vm.reset(); finish() }
-    }
     private val capture = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val file = pendingPhoto; pendingPhoto = null
         if (result.resultCode == RESULT_OK && file != null && file.exists()) vm.photo(file)
@@ -52,7 +49,8 @@ class ScannerActivity : AppCompatActivity() {
         enableEdgeToEdge()
         window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
         vm = ViewModelProvider(this)[ScannerViewModel::class.java]
-        owner = FirebaseAuth.getInstance().currentUser?.uid
+        ApiDependencies.initialize(applicationContext)
+        owner = ApiDependencies.currentUid()
         if (owner == null) { finish(); return }
         StockerPreferences(this, owner!!).applyTheme(this)
         val store = getSharedPreferences("pending-restocking", MODE_PRIVATE)
@@ -83,7 +81,6 @@ class ScannerActivity : AppCompatActivity() {
             val safe = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.ime())
             view.setPadding(safe.left,safe.top,safe.right,safe.bottom); insets
         }
-        FirebaseAuth.getInstance().addAuthStateListener(authListener)
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 if (vm.state.value?.loading == true) return
@@ -197,11 +194,11 @@ class ScannerActivity : AppCompatActivity() {
             result.observations.size,pending+observed,"photo-result:$shelf",fromPhoto=true,observations=notes)
     }
     private fun render(state:ScannerState) {
-        if(FirebaseAuth.getInstance().currentUser?.uid!=owner) return
+        if(ApiDependencies.currentUid()!=owner) return
         if(state.step==ScannerStep.RESULT && state.result!=null && !state.loading && state.pendingBatch.isEmpty()) {
             scroll.visibility=View.GONE; resultView.visibility=View.VISIBLE
             window.statusBarColor=ui.color(R.color.home_header_top)
-            resultView.showStandaloneResult(owner!!,FirebaseAuth.getInstance().currentUser?.email.orEmpty(),analysis(state))
+            resultView.showStandaloneResult(owner!!,"",analysis(state))
             return
         }
         resultView.visibility=View.GONE; scroll.visibility=View.VISIBLE
@@ -325,10 +322,13 @@ class ScannerActivity : AppCompatActivity() {
         } else finish()
     }
     override fun finish() { super.finish(); UiMotion.close(this) }
+    override fun onResume() {
+        super.onResume()
+        if(owner!=null && ApiDependencies.currentUid()!=owner) finish()
+    }
     override fun onDestroy() {
         confirmation?.dismiss()
         if(::resultView.isInitialized) resultView.close()
-        FirebaseAuth.getInstance().removeAuthStateListener(authListener)
         if(isFinishing) pendingPhoto?.delete()
         super.onDestroy()
     }

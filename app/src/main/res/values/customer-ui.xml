@@ -1,0 +1,23 @@
+<resources>
+    <color name="customer_background">#F4F7F5</color>
+    <string name="customer_account_type">Tipo de conta:</string>
+    <string name="customer_profile_description">Consulte seus dados e sua conta</string>
+    <string name="customer_role">Cliente</string>
+    <string name="customer_favorites">Favoritos</string>
+    <string name="customer_purchases">Compras</string>
+    <string name="customer_activity_notifications">Notas e compras</string>
+    <string name="customer_activity_notifications_description">Preferências de avisos sobre suas atividades no Kairos.</string>
+    <string name="customer_help_scan">Como ler uma nota fiscal?</string>
+    <string name="customer_help_scan_answer">Em Início, toque em Escanear nota fiscal e fotografe os itens. Confira as sugestões com a nota: a leitura pode conter erros e não registra uma compra automaticamente.</string>
+    <string name="customer_help_favorites">Onde ficam meus favoritos?</string>
+    <string name="customer_help_favorites_answer">Na aba Favoritos. Eles ficam salvos neste aparelho e separados por conta. Limpar os dados ou desinstalar o aplicativo pode removê-los.</string>
+    <string name="customer_help_reports">Como reportar um produto com problema?</string>
+    <string name="customer_help_reports_answer">Quando o envio estiver disponível para o mercado, toque em Reportar avaria, escolha o produto, descreva o problema e anexe uma foto se quiser. Confira e confirme o envio. O protocolo aparece após o registro, e o atendimento pode ser acompanhado em Compras → Seus reportes.</string>
+    <string name="customer_help_password_answer">Em Ajustes → Segurança, você pode consultar os dados de acesso. A alteração de senha por esta tela ainda não está disponível.</string>
+    <string name="customer_help_profile_answer">Abra Ajustes → Perfil para consultar sua conta e o resumo dos seus favoritos e compras disponíveis. Os favoritos ficam salvos neste aparelho.</string>
+    <item type="id" name="customer_nav_home" />
+    <item type="id" name="customer_nav_favorites" />
+    <item type="id" name="customer_nav_purchases" />
+    <item type="id" name="customer_nav_settings" />
+    <item type="id" name="customer_settings_back" />
+</resources>
