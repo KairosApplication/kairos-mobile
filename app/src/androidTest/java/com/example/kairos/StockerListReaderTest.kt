@@ -60,4 +60,13 @@ class StockerListReaderTest {
             assertTrue(error.message.orEmpty().contains("registros demais"))
         }
     }
+    @Test fun readsDamageMetadataWithoutRetainingPrivateFields() {
+        val json="""[{"id":91,"report_id":"b8b80b83-b86d-47c8-b8ec-8c0361fe3aa5","problem_type":"DAMAGED","report_description":"Broken","product_name":"Product","reported_at":"2026-11-05T12:00:00Z","photo":"ignored","customer":{"email":"private@invalid"}}]"""
+        val metadata=StockerListReader.read(json.byteInputStream(),
+            com.example.kairos.model.home.StockerDamageReports.fields) { true }
+        assertEquals(6,metadata.single().length())
+        assertFalse(metadata.single().has("photo"))
+        assertFalse(metadata.single().has("customer"))
+    }
+
 }

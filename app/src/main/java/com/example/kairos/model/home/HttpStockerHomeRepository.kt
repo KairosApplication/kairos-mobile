@@ -9,7 +9,9 @@ import java.time.ZoneId
 class HttpStockerHomeRepository : StockerHomeRepository {
     override fun resolveAlert(userId:String,id:String) {
         require(id.toLongOrNull()?.let { it>0 }==true)
-        ApiDependencies.spring().request(userId,"/api/v1/alerts/update/$id","PATCH",JSONObject().put("status","RESOLVED"))
+        val response = JSONObject(ApiDependencies.spring().request(userId,
+            "/api/v1/alerts/customer-reports/$id/resolve", "PATCH"))
+        check(response.getLong("alertId").toString() == id && response.getString("status") == "RESOLVED")
     }
     override fun load(userId: String): StockerHomeData {
         val api = ApiDependencies.spring()
@@ -25,12 +27,18 @@ class HttpStockerHomeRepository : StockerHomeRepository {
                 analysisId = "restocking:${it.getLong("restocking_id")}",
                 restockedQuantity = it.getInt("restocked_quantity"), damagedQuantity = it.getInt("qnt_avarias"), productId = it.getLong("product_id"))
         }
-        val alerts = api.read(userId, "/api/v1/alerts/list") { StockerListReader.alerts(it, employeeId) }
+        val loadedAlerts = api.read(userId, "/api/v1/alerts/list") { StockerListReader.alerts(it, employeeId) }
             .map { row ->
                 JSONObject().put("id",row.getLong("id")).put("shelf_id",row.opt("shelfId"))
                     .put("product_id",row.opt("productId")).put("description",row.getString("description"))
                     .put("stockout_date",row.opt("stockoutDate"))
             }
+        // Missing/denied metadata is a failed load: never present a report as an ordinary restocking.
+        val metadata = if (loadedAlerts.isEmpty()) emptyList() else api.read(userId,
+            "/api/v1/alerts/customer-reports") { input ->
+            StockerListReader.read(input, StockerDamageReports.fields) { true }
+        }
+        val alerts = StockerDamageReports.associate(loadedAlerts, metadata)
         val shelfIds = records.mapNotNull { it.shelfCode.toLongOrNull() }.toSet() + alerts.mapNotNull { it.optionalLong("shelf_id") }
         val shelfRows = if (shelfIds.isEmpty()) emptyList() else api.read(userId,"/api/v1/shelves/list") { input ->
             StockerListReader.read(input,setOf("id","aisleId","aislePosition")) { it.getLong("id") in shelfIds }

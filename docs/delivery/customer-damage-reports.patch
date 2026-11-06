@@ -1,6 +1,192 @@
+diff --git a/docs/customer-damage-reports.md b/docs/customer-damage-reports.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..650b05a71f71ddc4d697b9b559a855a8d6de94ad
+--- /dev/null
++++ b/docs/customer-damage-reports.md
+@@ -0,0 +1,106 @@
++# Entrega: relato de avaria do cliente
++
++O Android foi conectado a uma operação específica para cliente. A API precisa
++receber a alteração deste pacote e ser publicada para habilitar o botão.
++Nenhum backend ou banco remoto foi alterado durante a preparação.
++
++## Aplicar no repositório kairos-springboot
++
++O patch foi preparado sobre `main` no commit
++`b99a91a5919af5cdab179617b25ca7efcf042b14` e contém somente o fluxo de avaria.
++Favoritos continuam locais; não há ofertas nem mudanças na leitura de notas.
++
++```powershell
++git apply --check customer-damage-reports.patch
++git apply customer-damage-reports.patch
++./mvnw.cmd -Ppostgres-tests "-Dtest=CustomerDamageReportPostgresTest" test
++./mvnw.cmd verify
++```
++
++Revisar o diff e publicar pelo processo habitual do backend. A migração Flyway
++`V5__customer_damage_reports.sql` cria uma tabela, índice e trigger novos.
++Se já existir V5 em outra branch/ambiente, alinhar a versão antes de publicar.
++Não executar migrations manualmente nem habilitar `ddl-auto=update`.
++
++Não são necessárias novas chaves, credenciais de IA ou permissões de gerente
++no aplicativo cliente. A autenticação é o mesmo Bearer da API Spring existente.
++O CSRF existente permanece para chamadas autenticadas por cookies.
++
++## Rotas
++
++Todas exigem `CUSTOMER` e usam o cliente/mercado encontrados na sessão:
++
++- `GET /api/v1/customer/damage-reports/capabilities`: versão 1, mercado e suporte a foto.
++- `GET /api/v1/customer/damage-reports/options`: produtos e localizações do próprio mercado.
++- `POST /api/v1/customer/damage-reports`: registra e encaminha o relato.
++- `GET /api/v1/customer/damage-reports`: últimos 100 relatos da própria conta, com status atual do alerta.
++
++```json
++{
++  "commandId": "258e5269-c619-4a1c-ad50-b53342e0162a",
++  "productId": 17,
++  "shelfId": null,
++  "problemType": "DAMAGED",
++  "description": "Embalagem aberta",
++  "imageBase64": "<JPEG opcional em base64>"
++}
++```
++
++`problemType`: `DAMAGED`, `TAMPERED`, `EXPIRED` ou `OTHER`. Descrição de até
++500 caracteres. Foto opcional JPEG de até 3 MiB e 4 milhões de pixels, validada
++e regravada sem metadados pelo servidor. O Android ajusta orientação e tamanho.
++
++```json
++{
++  "protocol": "b8b80b83-b86d-47c8-b8ec-8c0361fe3aa5",
++  "alertId": 91,
++  "status": "OPEN"
++}
++```
++
++Protocolo é confirmado somente após persistência do relato e alerta na mesma
++transação. Reenvios com o mesmo comando e conteúdo retornam o mesmo protocolo;
++conteúdo diferente com o mesmo comando retorna 409. Cliente e mercado nunca
++são aceitos do corpo da requisição.
++
++A trigger seleciona o repositor atribuído à gôndola ou ao corredor no mesmo
++mercado. Sem localização informada, encontra uma gôndola válida do produto
++com repositor e identifica no alerta que o cliente não informou o local.
++Sem vínculo válido, retorna conflito e não salva relato nem alerta incompleto.
++Não altera quantidades, estoque, compras ou reposições.
++
++O alerta entra na lista existente do repositor. Sua resolução atualiza o
++status exibido ao cliente em Compras → Seus reportes. O registro local de
++confirmação só é gravado depois do protocolo retornado pela API.
++A foto fica armazenada no relato; esta entrega não adiciona visualizador de
++anexos à tela do repositor.
++
++## Android
++
++- `CustomerDamageReports.kt`: contrato do cliente, validação e proteção contra troca de conta.
++- `PublishedCustomerRepository.kt`: detecta a operação publicada e consulta relatos.
++- `DamageReportActivity.kt`: formulário, foto opcional, revisão, envio e protocolo.
++- `CapturedPhoto.kt`: preparo de JPEG compartilhado com o scanner do repositor.
++- `ShelfCameraActivity.kt`: modo de captura de avaria na câmera existente.
++- `CustomerHomeView.kt`: acompanhamento independente do histórico de compras.
++- `CustomerRepository.kt`, `CustomerActivity.kt` e `customer-ui.xml`: suporte ao fluxo.
++
++Sem a nova rota publicada, a Home continua funcionando e o reporte permanece
++indisponível. Após a publicação, atualizar a Home do cliente.
++
++## Ligacao com o repositor
++
++- `GET /api/v1/alerts/customer-reports`: metadados de relatos abertos atribuidos ao funcionario autenticado, restritos ao mesmo mercado.
++- `PATCH /api/v1/alerts/customer-reports/{alertId}/resolve`: confirma a resolucao e preserva a primeira data em reenvios.
++- As respostas nao incluem foto nem dados pessoais do cliente e usam `Cache-Control: no-store`.
++- `StockerDamageReports` associa os metadados pelo ID aos alertas ja filtrados. Nao cria alertas, nao infere relatos por descricao e nao modifica entradas.
++- Relatos usam `OBSERVED`, sem analise de reposicao comum, e abrem os detalhes de avaria existentes.
++- O mobile exige o novo contrato quando existem alertas. Erros 403/404 nao sao ignorados: sem metadados, nao e seguro apresentar uma avaria como reposicao comum.
++- A resolucao so e confirmada depois da resposta com o mesmo `alertId` e `status=RESOLVED`; o recarregamento da Home foi preservado.
++- A V5 nao substitui migrations existentes. O teste especifico de atividade diaria continua com target 4; a criacao integral espera cinco migrations e 24 tabelas nesta base.
++
++## Validacao desta revisao
++
++Veja `customer-damage-review.md` para comandos e resultados executados nesta maquina.
++Resultados historicos de outros ambientes nao comprovam esta revisao.
++A API esta somente preparada localmente. O teste completo no ambiente publicado exige alinhamento e publicacao pelo responsavel.
+diff --git a/docs/customer-damage-review.md b/docs/customer-damage-review.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..325c1de11d53718bd72427c226cc3bd187a3c391
+--- /dev/null
++++ b/docs/customer-damage-review.md
+@@ -0,0 +1,66 @@
++# Revisao do fluxo de avarias - 2026-11-05
++
++## Bases e local das alteracoes
++
++- Mobile: PR #34 ainda aberta na consulta inicial; base `chore/estruturacao-cliente`, commit `fd96df17212fcc1a35465c8a7dd9e5dc2921e619`.
++- Branch local mobile: `fix/customer-damage-stocker-link`.
++- Backend oficial: `main`, commit `b99a91a5919af5cdab179617b25ca7efcf042b14`.
++- Branch local backend: `feat/customer-damage-report-flow`.
++- Copias isoladas em `%TEMP%/kairos-damage-review-20261105/mobile` e `backend`. Checkouts existentes preservados. Nenhuma fonte `.integration` utilizada.
++
++## O que ja existia
++
++A PR mobile ja implementava o formulario de avaria, foto opcional, envio idempotente, protocolo, acompanhamento do cliente e interface do repositor para `customerReport`.
++O backend desse fluxo estava apenas no patch de entrega da PR mobile; nao na main oficial. A main atual coincidiu com a base do patch, que passou em `git apply --check` antes da aplicacao local.
++A lacuna foi confirmada: a lista comum de alertas nao fornecia os metadados que alimentam `customerReport`.
++
++## Arquivos e motivos
++
++### Mobile
++
++- `StockerDamageReports.kt`: associacao por ID somente a alertas carregados; copia das entradas; validacao de UUID, Instant e quatro tipos de problema; sem classificacao por descricao.
++- `HttpStockerHomeRepository.kt`: consulta metadados, enriquece os alertas e utiliza a rota especifica de resolucao; exige confirmacao com ID e status corretos. Mantem a UI, os estados OBSERVED, a ausencia de analise de reposicao em relatos e o recarregamento existente.
++- `StockerDamageReportsTest.kt`: associacao, preservacao, ausencia de mutacao, metadados sem alerta, descricao comum e rejeicao de dados invalidos.
++- `StockerListReaderTest.kt`: leitura apenas dos seis campos do contrato, descartando foto e dados do cliente.
++- `docs/delivery`: patch completo do backend e documentacao atualizados.
++- `.gitattributes`: preserva as linhas de contexto vazias do patch de entrega sem trata-las como espacos finais do codigo.
++
++403/404 nos metadados nao sao ignorados. Se houver alertas e o contrato estiver ausente ou negado, a Home apresenta erro, evitando tratar uma avaria como reposicao comum. Por isso, publicar a API antes do app.
++
++### Backend
++
++- Patch original incorporado: `CustomerDamageReportController`, `CustomerDamageReportRequest`, `CustomerDamageReportService`, `V5__customer_damage_reports.sql` e permissoes CUSTOMER especificas.
++- `StockerDamageReportController` e `StockerDamageReportService`: consulta sem dados pessoais/foto, identidade da sessao, atribuicao e mercado conferidos, `Cache-Control: no-store`, resolucao transacional com bloqueio do alerta e primeira data preservada.
++- `CustomerDamageReportPostgresTest`: 11 cenarios, incluindo os originais e a ligacao com o repositor; sem alteracao de estoque, compras ou reposicoes.
++- `FlywaySchemaIntegrationTest`: cinco migrations/24 tabelas nesta base; teste especifico de atividade diaria limitado ao target 4.
++- `AuthControllerIntegrationTest`: cliente recebe 403 nas rotas de repositor.
++- `StockerDamageReportControllerTest`: rotas, identidade recebida, resposta e no-store.
++- `CustomerDamageReportServiceTest` e `StockerDamageReportServiceTest`: regras do fluxo tambem cobertas na suite padrao da CI.
++- Comparacoes de autoridades tornadas seguras para valores nulos apos diagnostico do SpotBugs; limite de cobertura mantido em 90%.
++
++## Contratos novos na API
++
++Cliente: GET capabilities, GET options, POST e GET em `/api/v1/customer/damage-reports`.
++Repositor: GET `/api/v1/alerts/customer-reports` e PATCH `/api/v1/alerts/customer-reports/{alertId}/resolve`.
++As permissoes EMPLOYEE/MANAGER existentes para `/api/v1/alerts/**` foram preservadas, com verificacao adicional de atribuicao, cargo e mercado no servico.
++
++## Validacao local
++
++Java 21 e SDK Android instalado.
++
++- `gradlew.bat --no-daemon :app:assembleDebug :app:testDebugUnitTest :app:assembleDebugAndroidTest`: sucesso; 84 testes unitarios, zero falhas. APK de app e APK de testes gerados. Testes instrumentados nao executados em aparelho/emulador nesta revisao.
++- `mvnw.cmd -B -ntp clean verify`: sucesso; 270 casos, 238 executados e 32 ignorados pelos perfis existentes. Cobertura 92,29%; Checkstyle zero; SpotBugs zero.
++- Sete testes focados novos de servico/controller: sucesso.
++- A primeira rodada completa PostgreSQL executou 254 testes, incluindo 11 de avarias, sem falhas; o build foi bloqueado por tres avisos de nulidade, corrigidos depois. A primeira rodada padrao identificou cobertura de 86%, corrigida com testes de servico, sem reduzir o limite.
++- `mvnw.cmd -B -ntp -Ppostgres-tests clean verify`: sucesso na versao final; 270 casos, 261 executados, 9 ignorados. Zero falhas/erros. Cobertura 92.95%; Checkstyle zero; SpotBugs zero. Os 11 testes de avarias e dois de Flyway passaram.
++
++Os testes PostgreSQL usam somente Testcontainers descartaveis. Nenhum segredo foi copiado para codigo, patch ou documentacao.
++
++## Ambiente publicado e pendencias
++
++- Ambos os logins fornecidos autenticaram na API publicada; perfis EMPLOYEE e CUSTOMER confirmados.
++- Consulta somente leitura confirmou que o repositor pertence ao mercado 57 e o cliente ao mercado 1. Portanto, essas contas nao podem validar o mesmo relato. Usar contas autorizadas do mesmo mercado, com repositor vinculado a gondola/corredor do produto.
++- OpenAPI publicado: nenhuma rota de avaria disponivel na verificacao.
++- Banco configurado: historico Flyway ate V3; tabela `customer_damage_reports` ausente. Nenhuma migration foi executada nesse banco. A publicacao deve aplicar as migrations pendentes pelo Flyway habitual; nao renumerar migrations nem usar ddl-auto=update.
++- API somente preparada localmente: nenhum push, PR, merge ou deploy nesta revisao. Nenhuma conta foi criada/modificada e nenhuma avaria ficticia foi enviada ao ambiente publicado.
++- Fluxo publicado ainda nao concluido. Apos alinhar com o responsavel, publicar API, disponibilizar o app e validar envio com/sem foto, protocolo, alerta correto, resolucao, acompanhamento, reenvios/falha de rede e isolamento entre contas/mercados.
+diff --git a/src/main/java/com/kairos/kairosapipostgres/config/SecurityConfig.java b/src/main/java/com/kairos/kairosapipostgres/config/SecurityConfig.java
+index f1c5b62c99efcf2657dbf6499ab02cf82d47d139..09f0d08d67ae370e073442df87009c7ba1ef2fb0 100644
 --- a/src/main/java/com/kairos/kairosapipostgres/config/SecurityConfig.java
 +++ b/src/main/java/com/kairos/kairosapipostgres/config/SecurityConfig.java
-@@ -94,6 +94,8 @@
+@@ -94,6 +94,8 @@ public class SecurityConfig {
                          .requestMatchers(HttpMethod.POST, "/api/v1/auth/refresh", "/api/v1/auth/logout").permitAll()
                          .requestMatchers(HttpMethod.GET, "/api/v1/auth/me").authenticated()
                          .requestMatchers(HttpMethod.POST, "/api/v1/auth/chat-context").authenticated()
@@ -9,6 +195,9 @@
  
                          .requestMatchers(HttpMethod.GET, "/api/v1/store-map").hasRole("MANAGER")
  
+diff --git a/src/main/java/com/kairos/kairosapipostgres/controller/CustomerDamageReportController.java b/src/main/java/com/kairos/kairosapipostgres/controller/CustomerDamageReportController.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..043c566b4b2fbe2e424f5a593f17da377e9cab37
 --- /dev/null
 +++ b/src/main/java/com/kairos/kairosapipostgres/controller/CustomerDamageReportController.java
 @@ -0,0 +1,43 @@
@@ -55,6 +244,46 @@
 +        return ok(service.report(auth, request));
 +    }
 +}
+diff --git a/src/main/java/com/kairos/kairosapipostgres/controller/StockerDamageReportController.java b/src/main/java/com/kairos/kairosapipostgres/controller/StockerDamageReportController.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..1c6fbbcba83819dad6e0b453c24ca920f1c4914e
+--- /dev/null
++++ b/src/main/java/com/kairos/kairosapipostgres/controller/StockerDamageReportController.java
+@@ -0,0 +1,31 @@
++package com.kairos.kairosapipostgres.controller;
++
++import com.kairos.kairosapipostgres.service.StockerDamageReportService;
++import org.springframework.http.CacheControl;
++import org.springframework.http.ResponseEntity;
++import org.springframework.security.core.Authentication;
++import org.springframework.web.bind.annotation.GetMapping;
++import org.springframework.web.bind.annotation.PatchMapping;
++import org.springframework.web.bind.annotation.PathVariable;
++import org.springframework.web.bind.annotation.RequestMapping;
++import org.springframework.web.bind.annotation.RestController;
++
++@RestController
++@RequestMapping("/api/v1/alerts/customer-reports")
++public class StockerDamageReportController {
++    private final StockerDamageReportService service;
++
++    public StockerDamageReportController(StockerDamageReportService service) {
++        this.service = service;
++    }
++
++    @GetMapping
++    public ResponseEntity<?> list(Authentication auth) {
++        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(service.list(auth));
++    }
++
++    @PatchMapping("/{alertId}/resolve")
++    public ResponseEntity<?> resolve(Authentication auth, @PathVariable long alertId) {
++        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(service.resolve(auth, alertId));
++    }
++}
+diff --git a/src/main/java/com/kairos/kairosapipostgres/dto/request/CustomerDamageReportRequest.java b/src/main/java/com/kairos/kairosapipostgres/dto/request/CustomerDamageReportRequest.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..ac121fb414354c65f39cfa3de4a1d328e9a679f4
 --- /dev/null
 +++ b/src/main/java/com/kairos/kairosapipostgres/dto/request/CustomerDamageReportRequest.java
 @@ -0,0 +1,13 @@
@@ -71,6 +300,9 @@
 +        @NotNull @Size(max = 500) String description,
 +        @Size(max = 4194304) String imageBase64) {
 +}
+diff --git a/src/main/java/com/kairos/kairosapipostgres/service/CustomerDamageReportService.java b/src/main/java/com/kairos/kairosapipostgres/service/CustomerDamageReportService.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..0af5d498c70265190476cda38d4c8d6ff556f1ce
 --- /dev/null
 +++ b/src/main/java/com/kairos/kairosapipostgres/service/CustomerDamageReportService.java
 @@ -0,0 +1,200 @@
@@ -104,7 +336,7 @@
 +
 +    private Actor actor(Authentication auth) {
 +        if (auth == null || !auth.isAuthenticated() || auth.getAuthorities().stream()
-+                .noneMatch(role -> role.getAuthority().equals("ROLE_CUSTOMER"))) {
++                .noneMatch(role -> "ROLE_CUSTOMER".equals(role.getAuthority()))) {
 +            throw new ResponseStatusException(HttpStatus.FORBIDDEN);
 +        }
 +        var rows = db.queryForList("""
@@ -274,6 +506,99 @@
 +        }
 +    }
 +}
+diff --git a/src/main/java/com/kairos/kairosapipostgres/service/StockerDamageReportService.java b/src/main/java/com/kairos/kairosapipostgres/service/StockerDamageReportService.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..2c509687467d24700892b4e6e934ab852aaf8b13
+--- /dev/null
++++ b/src/main/java/com/kairos/kairosapipostgres/service/StockerDamageReportService.java
+@@ -0,0 +1,84 @@
++package com.kairos.kairosapipostgres.service;
++
++import org.springframework.http.HttpStatus;
++import org.springframework.jdbc.core.JdbcTemplate;
++import org.springframework.security.core.Authentication;
++import org.springframework.stereotype.Service;
++import org.springframework.transaction.annotation.Transactional;
++import org.springframework.web.server.ResponseStatusException;
++
++import java.time.OffsetDateTime;
++import java.util.List;
++import java.util.Map;
++
++@Service
++public class StockerDamageReportService {
++    private final JdbcTemplate db;
++
++    public StockerDamageReportService(JdbcTemplate db) {
++        this.db = db;
++    }
++
++    private record Actor(long employeeId, long companyId) { }
++
++    private Actor actor(Authentication auth) {
++        if (auth == null || !auth.isAuthenticated() || auth.getAuthorities().stream()
++                .noneMatch(role -> "ROLE_EMPLOYEE".equals(role.getAuthority())
++                        || "ROLE_MANAGER".equals(role.getAuthority()))) {
++            throw new ResponseStatusException(HttpStatus.FORBIDDEN);
++        }
++        var rows = db.query("""
++                SELECT e.id,e.company_id FROM employees e JOIN users u ON u.id=e.users_id
++                WHERE u.email=? AND e.position IN ('STOCKER','MANAGER')
++                """, (rs, index) -> new Actor(rs.getLong("id"), rs.getLong("company_id")), auth.getName());
++        if (rows.size() != 1) {
++            throw new ResponseStatusException(HttpStatus.FORBIDDEN);
++        }
++        return rows.getFirst();
++    }
++
++    @Transactional(readOnly = true)
++    public List<Map<String, Object>> list(Authentication auth) {
++        var owner = actor(auth);
++        return db.query("""
++                SELECT a.id,r.id report_id,r.problem_type,r.description report_description,
++                       p.name product_name,r.created_at reported_at
++                FROM customer_damage_reports r JOIN alerts a ON a.id=r.alert_id
++                JOIN products p ON p.id=r.product_id
++                JOIN shelves sh ON sh.id=a.shelf_id JOIN aisles ai ON ai.id=sh.aisle_id
++                JOIN sectors s ON s.id=ai.sector_id
++                WHERE a.employee_id=? AND r.company_id=? AND s.company_id=?
++                  AND p.company_id=? AND a.status='OPEN'
++                ORDER BY r.created_at DESC,a.id DESC
++                """, (rs, index) -> Map.<String, Object>of(
++                "id", rs.getLong("id"), "report_id", rs.getString("report_id"),
++                "problem_type", rs.getString("problem_type"),
++                "report_description", rs.getString("report_description"),
++                "product_name", rs.getString("product_name"),
++                "reported_at", rs.getObject("reported_at", OffsetDateTime.class).toInstant().toString()),
++                owner.employeeId(), owner.companyId(), owner.companyId(), owner.companyId());
++    }
++
++    @Transactional
++    public Map<String, Object> resolve(Authentication auth, long alertId) {
++        var owner = actor(auth);
++        var rows = db.queryForList("""
++                SELECT a.id,a.status FROM customer_damage_reports r JOIN alerts a ON a.id=r.alert_id
++                JOIN products p ON p.id=r.product_id
++                JOIN shelves sh ON sh.id=a.shelf_id JOIN aisles ai ON ai.id=sh.aisle_id
++                JOIN sectors s ON s.id=ai.sector_id
++                WHERE a.id=? AND a.employee_id=? AND r.company_id=? AND s.company_id=? AND p.company_id=?
++                FOR UPDATE OF a
++                """, alertId, owner.employeeId(), owner.companyId(), owner.companyId(), owner.companyId());
++        if (rows.isEmpty()) {
++            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
++        }
++        String status = rows.getFirst().get("status").toString();
++        if ("OPEN".equals(status)) {
++            db.update("UPDATE alerts SET status='RESOLVED',resolution_date=CURRENT_TIMESTAMP WHERE id=?", alertId);
++        } else if (!"RESOLVED".equals(status)) {
++            throw new ResponseStatusException(HttpStatus.CONFLICT, "O relato foi cancelado");
++        }
++        return Map.of("alertId", alertId, "status", "RESOLVED");
++    }
++}
+diff --git a/src/main/resources/db/migration/V5__customer_damage_reports.sql b/src/main/resources/db/migration/V5__customer_damage_reports.sql
+new file mode 100644
+index 0000000000000000000000000000000000000000..d83831bd7c4ebbd81deb5d917797dc2b9ed2fe33
 --- /dev/null
 +++ b/src/main/resources/db/migration/V5__customer_damage_reports.sql
 @@ -0,0 +1,47 @@
@@ -324,13 +649,17 @@
 +END $$;
 +CREATE TRIGGER customer_damage_alert BEFORE INSERT ON customer_damage_reports
 +FOR EACH ROW EXECUTE FUNCTION create_customer_damage_alert();
+diff --git a/src/test/java/com/kairos/kairosapipostgres/CustomerDamageReportPostgresTest.java b/src/test/java/com/kairos/kairosapipostgres/CustomerDamageReportPostgresTest.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..28a53dd2c419b8bea231a113c802cda74fe5d7d3
 --- /dev/null
 +++ b/src/test/java/com/kairos/kairosapipostgres/CustomerDamageReportPostgresTest.java
-@@ -0,0 +1,183 @@
+@@ -0,0 +1,273 @@
 +package com.kairos.kairosapipostgres;
 +
 +import com.kairos.kairosapipostgres.dto.request.CustomerDamageReportRequest;
 +import com.kairos.kairosapipostgres.service.CustomerDamageReportService;
++import com.kairos.kairosapipostgres.service.StockerDamageReportService;
 +import org.flywaydb.core.Flyway;
 +import org.junit.jupiter.api.*;
 +import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
@@ -508,5 +837,367 @@
 +        var first = send(request);
 +        assertThat(send(request)).isEqualTo(first);
 +        assertThat(db.queryForObject("SELECT octet_length(photo) FROM customer_damage_reports", Integer.class)).isPositive();
++    }
++    private StockerDamageReportService stocker() {
++        return new StockerDamageReportService(db);
++    }
++
++    private Authentication responsible() {
++        return auth("stocker1@invalid", "EMPLOYEE");
++    }
++
++    private void assertStatus(int expected, Runnable operation) {
++        assertThatThrownBy(operation::run).isInstanceOfSatisfying(ResponseStatusException.class,
++                error -> assertThat(error.getStatusCode().value()).isEqualTo(expected));
++    }
++
++    @Test
++    void responsibleReceivesMetadataAndResolvesForCustomerWithStableResolutionDate() {
++        var confirmation = send(request(UUID.randomUUID(), 1L, "Broken package", null));
++        long id = ((Number) confirmation.get("alertId")).longValue();
++        var rows = stocker().list(responsible());
++        assertThat(rows).hasSize(1);
++        var metadata = rows.getFirst();
++        assertThat(metadata.keySet()).containsExactlyInAnyOrder("id", "report_id", "problem_type",
++                "report_description", "product_name", "reported_at");
++        assertThat(metadata.get("id")).isEqualTo(id);
++        assertThat(metadata.get("report_id")).isEqualTo(confirmation.get("protocol"));
++        assertThat(metadata.get("problem_type")).isEqualTo("DAMAGED");
++        assertThat(metadata.get("report_description")).isEqualTo("Broken package");
++        assertThat(metadata.get("product_name")).isEqualTo("Test product A");
++        assertThat(java.time.Instant.parse(metadata.get("reported_at").toString())).isNotNull();
++        Map<String, Object> resolved = tx.execute(status -> stocker().resolve(responsible(), id));
++        assertThat(resolved).isEqualTo(Map.of("alertId", id, "status", "RESOLVED"));
++        Object firstDate = db.queryForObject("SELECT resolution_date FROM alerts WHERE id=?", Object.class, id);
++        assertThat(firstDate).isNotNull();
++        tx.execute(status -> stocker().resolve(responsible(), id));
++        assertThat(db.queryForObject("SELECT resolution_date FROM alerts WHERE id=?", Object.class, id)).isEqualTo(firstDate);
++        assertThat(service.list(customer).getFirst().get("status")).isEqualTo("RESOLVED");
++        assertThat(stocker().list(responsible())).isEmpty();
++        assertThat(db.queryForObject("SELECT product_quantity FROM product_shelves WHERE product_id=1", Integer.class)).isEqualTo(7);
++        assertThat(count("restockings")).isZero();
++        assertThat(count("purchases")).isZero();
++    }
++
++    @Test
++    void anotherEmployeeOrCompanyCannotReadOrResolveReportAndCustomerIsForbidden() {
++        var confirmation = send(request(UUID.randomUUID(), 1L, "Problem", null));
++        long id = ((Number) confirmation.get("alertId")).longValue();
++        var foreign = auth("stocker2@invalid", "EMPLOYEE");
++        assertThat(stocker().list(foreign)).isEmpty();
++        assertStatus(404, () -> tx.execute(status -> stocker().resolve(foreign, id)));
++        db.update("INSERT INTO users(id,name,last_name,birth_date,cpf,email,password) VALUES "
++                + "(6,'Other','Stocker','2000-01-01','00000000006','same-company@invalid','not-a-login')");
++        db.update("INSERT INTO employees(id,users_id,company_id,position) VALUES (3,6,1,'STOCKER')");
++        var other = auth("same-company@invalid", "EMPLOYEE");
++        assertThat(stocker().list(other)).isEmpty();
++        assertStatus(404, () -> tx.execute(status -> stocker().resolve(other, id)));
++        assertStatus(403, () -> stocker().list(customer));
++        assertStatus(403, () -> tx.execute(status -> stocker().resolve(customer, id)));
++        // Even an assigned employee cannot read a report outside their current market.
++        db.update("UPDATE employees SET company_id=2 WHERE id=1");
++        assertThat(stocker().list(responsible())).isEmpty();
++        assertStatus(404, () -> tx.execute(status -> stocker().resolve(responsible(), id)));
++        assertThat(service.list(customer).getFirst().get("status")).isEqualTo("OPEN");
++    }
++
++    @Test
++    void cancelledReportsAndOrdinaryAlertsCannotBeResolvedByReportEndpoint() {
++        var confirmation = send(request(UUID.randomUUID(), 1L, "Problem", null));
++        long id = ((Number) confirmation.get("alertId")).longValue();
++        db.update("UPDATE alerts SET status='CANCELLED' WHERE id=?", id);
++        assertStatus(409, () -> tx.execute(status -> stocker().resolve(responsible(), id)));
++        assertThat(stocker().list(responsible())).isEmpty();
++        assertThat(db.queryForObject("SELECT resolution_date FROM alerts WHERE id=?", Object.class, id)).isNull();
++        long ordinary = db.queryForObject("INSERT INTO alerts(stockout_date,employee_id,shelf_id,product_id,description,status) "
++                + "VALUES(CURRENT_DATE,1,1,1,'Ordinary alert','OPEN') RETURNING id", Long.class);
++        assertStatus(404, () -> tx.execute(status -> stocker().resolve(responsible(), ordinary)));
++    }
++
++    @Test
++    void aisleAssignmentWorksWithoutDirectShelfAssignment() {
++        db.update("DELETE FROM shelf_employees WHERE employee_id=1");
++        db.update("INSERT INTO employee_aisles(employee_id,aisle_id) VALUES(1,1)");
++        var confirmation = send(request(UUID.randomUUID(), 1L, "Aisle assigned", null));
++        assertThat(stocker().list(responsible())).hasSize(1);
++        tx.execute(status -> stocker().resolve(responsible(), ((Number) confirmation.get("alertId")).longValue()));
++        assertThat(service.list(customer).getFirst().get("status")).isEqualTo("RESOLVED");
++        assertThat(db.queryForObject("SELECT product_quantity FROM product_shelves WHERE product_id=1", Integer.class)).isEqualTo(7);
++        assertThat(count("restockings")).isZero();
++        assertThat(count("purchases")).isZero();
++    }
++
++}
+diff --git a/src/test/java/com/kairos/kairosapipostgres/FlywaySchemaIntegrationTest.java b/src/test/java/com/kairos/kairosapipostgres/FlywaySchemaIntegrationTest.java
+index 2da5b7b1fa685840453d8284735942240001496d..7075b2e81df0a2e305335d1ef812a16995f57a4e 100644
+--- a/src/test/java/com/kairos/kairosapipostgres/FlywaySchemaIntegrationTest.java
++++ b/src/test/java/com/kairos/kairosapipostgres/FlywaySchemaIntegrationTest.java
+@@ -34,7 +34,7 @@ class FlywaySchemaIntegrationTest {
+                 row.next();
+                 first = row.getObject(1, java.time.OffsetDateTime.class);
+             }
+-            assertThat(Flyway.configure().dataSource(url, "test", "test").load().migrate().migrationsExecuted).isEqualTo(1);
++            assertThat(Flyway.configure().dataSource(url, "test", "test").target("4").load().migrate().migrationsExecuted).isEqualTo(1);
+             try (var statement = connection.createStatement();
+                  var row = statement.executeQuery("SELECT first_seen_at FROM user_accesses")) {
+                 assertThat(row.next()).isTrue();
+@@ -53,7 +53,7 @@ class FlywaySchemaIntegrationTest {
+                     .locations("classpath:db/migration")
+                     .load();
+ 
+-            assertThat(flyway.migrate().migrationsExecuted).isEqualTo(4);
++            assertThat(flyway.migrate().migrationsExecuted).isEqualTo(5);
+ 
+             try (var statement = connection.createStatement();
+                  var tables = statement.executeQuery("""
+@@ -62,7 +62,7 @@ class FlywaySchemaIntegrationTest {
+                            AND table_name <> 'flyway_schema_history'
+                          """)) {
+                 tables.next();
+-                assertThat(tables.getInt(1)).isEqualTo(23);
++                assertThat(tables.getInt(1)).isEqualTo(24);
+             }
+ 
+             try (var statement = connection.createStatement();
+diff --git a/src/test/java/com/kairos/kairosapipostgres/controller/AuthControllerIntegrationTest.java b/src/test/java/com/kairos/kairosapipostgres/controller/AuthControllerIntegrationTest.java
+index cad2f8d273341c149328952b0a10f17234c1fbbd..d3f3e2654f556261574712b2ee776aad3753f95e 100644
+--- a/src/test/java/com/kairos/kairosapipostgres/controller/AuthControllerIntegrationTest.java
++++ b/src/test/java/com/kairos/kairosapipostgres/controller/AuthControllerIntegrationTest.java
+@@ -300,6 +300,16 @@ class AuthControllerIntegrationTest {
+                 .andExpect(status().isUnauthorized());
+     }
+ 
++    @Test
++    void customerCannotUseStockerDamageReportRoutes() throws Exception {
++        String access = access(login(customer().getEmail()));
++        mvc.perform(get("/api/v1/alerts/customer-reports").header("Authorization", "Bearer " + access))
++                .andExpect(status().isForbidden());
++        mvc.perform(patch("/api/v1/alerts/customer-reports/91/resolve")
++                        .with(cookieCsrf(mvc, mapper)).header("Authorization", "Bearer " + access))
++                .andExpect(status().isForbidden());
++    }
++
+     private String expired(String token) {
+         var claims = org.springframework.security.oauth2.jwt.JwtClaimsSet.builder()
+                 .claims(values -> values.putAll(decoder.decode(token).getClaims()))
+diff --git a/src/test/java/com/kairos/kairosapipostgres/controller/StockerDamageReportControllerTest.java b/src/test/java/com/kairos/kairosapipostgres/controller/StockerDamageReportControllerTest.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..6e4dc078d36ee2c0f796984af87078b0c0c511cb
+--- /dev/null
++++ b/src/test/java/com/kairos/kairosapipostgres/controller/StockerDamageReportControllerTest.java
+@@ -0,0 +1,32 @@
++package com.kairos.kairosapipostgres.controller;
++
++import com.kairos.kairosapipostgres.service.StockerDamageReportService;
++import org.junit.jupiter.api.Test;
++import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
++import org.springframework.test.web.servlet.setup.MockMvcBuilders;
++
++import java.util.List;
++import java.util.Map;
++
++import static org.mockito.Mockito.*;
++import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
++import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
++
++class StockerDamageReportControllerTest {
++    @Test
++    void routesPassAuthenticatedIdentityAndDisableCaching() throws Exception {
++        var service = mock(StockerDamageReportService.class);
++        var actor = new UsernamePasswordAuthenticationToken("stocker@invalid", null, List.of());
++        when(service.list(actor)).thenReturn(List.of(Map.of("id", 91L)));
++        when(service.resolve(actor, 91L)).thenReturn(Map.of("alertId", 91L, "status", "RESOLVED"));
++        var mvc = MockMvcBuilders.standaloneSetup(new StockerDamageReportController(service)).build();
++        mvc.perform(get("/api/v1/alerts/customer-reports").principal(actor))
++                .andExpect(status().isOk()).andExpect(header().string("Cache-Control", "no-store"))
++                .andExpect(jsonPath("$[0].id").value(91));
++        mvc.perform(patch("/api/v1/alerts/customer-reports/91/resolve").principal(actor))
++                .andExpect(status().isOk()).andExpect(header().string("Cache-Control", "no-store"))
++                .andExpect(jsonPath("$.alertId").value(91)).andExpect(jsonPath("$.status").value("RESOLVED"));
++        verify(service).list(actor);
++        verify(service).resolve(actor, 91L);
++    }
++}
+diff --git a/src/test/java/com/kairos/kairosapipostgres/service/CustomerDamageReportServiceTest.java b/src/test/java/com/kairos/kairosapipostgres/service/CustomerDamageReportServiceTest.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..d603b804b9ffc394466978d74908f9a83babe39c
+--- /dev/null
++++ b/src/test/java/com/kairos/kairosapipostgres/service/CustomerDamageReportServiceTest.java
+@@ -0,0 +1,113 @@
++package com.kairos.kairosapipostgres.service;
++
++import com.kairos.kairosapipostgres.dto.request.CustomerDamageReportRequest;
++import org.junit.jupiter.api.BeforeEach;
++import org.junit.jupiter.api.Test;
++import org.springframework.dao.DataIntegrityViolationException;
++import org.springframework.jdbc.core.JdbcTemplate;
++import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
++import org.springframework.security.core.Authentication;
++import org.springframework.security.core.authority.SimpleGrantedAuthority;
++import org.springframework.web.server.ResponseStatusException;
++
++import javax.imageio.ImageIO;
++import java.awt.image.BufferedImage;
++import java.io.ByteArrayOutputStream;
++import java.util.*;
++
++import static org.assertj.core.api.Assertions.*;
++import static org.mockito.ArgumentMatchers.*;
++import static org.mockito.Mockito.*;
++
++class CustomerDamageReportServiceTest {
++    private final JdbcTemplate db = mock(JdbcTemplate.class);
++    private final CustomerDamageReportService service = new CustomerDamageReportService(db);
++    private final Authentication customer = new UsernamePasswordAuthenticationToken("customer@invalid", null,
++            List.of(new SimpleGrantedAuthority("ROLE_CUSTOMER")));
++    private final UUID protocol = UUID.randomUUID();
++
++    @BeforeEach
++    void ownerAndAvailableProduct() {
++        when(db.queryForList(contains("SELECT c.id,c.company_id"), eq("customer@invalid")))
++                .thenReturn(List.of(Map.of("id", 1L, "company_id", 2L, "name", "Test market")));
++        when(db.queryForList(contains("SELECT id FROM products"), eq(17L), eq(2L)))
++                .thenReturn(List.of(Map.of("id", 17)));
++        when(db.queryForMap(contains("SELECT r.id,r.alert_id"), any(UUID.class)))
++                .thenReturn(Map.of("id", protocol, "alert_id", 91, "status", "OPEN"));
++    }
++
++    private CustomerDamageReportRequest request(UUID command, String photo) {
++        return new CustomerDamageReportRequest(command, 17L, 3L, "DAMAGED", " Broken package ", photo);
++    }
++
++    @Test
++    void confirmsOnlyAfterWriteUsingAuthenticatedCustomerAndCompany() {
++        UUID command = UUID.randomUUID();
++        assertThat(service.report(customer, request(command, null)))
++                .isEqualTo(Map.of("protocol", protocol.toString(), "alertId", 91, "status", "OPEN"));
++        verify(db).update(contains("INSERT INTO customer_damage_reports"), any(UUID.class), eq(command),
++                eq(1L), eq(2L), eq(17L), eq(3L), eq("DAMAGED"), eq("Broken package"), isNull(), anyString());
++    }
++
++    @Test
++    void rejectsWrongRoleUnknownOwnerForeignProductAndFailedRouting() {
++        assertThatThrownBy(() -> service.report(null, request(UUID.randomUUID(), null)))
++                .isInstanceOf(ResponseStatusException.class);
++        var employee = new UsernamePasswordAuthenticationToken("employee@invalid", null,
++                List.of(new SimpleGrantedAuthority("ROLE_EMPLOYEE")));
++        assertThatThrownBy(() -> service.options(employee)).isInstanceOf(ResponseStatusException.class);
++        when(db.queryForList(contains("SELECT id FROM products"), eq(17L), eq(2L))).thenReturn(List.of());
++        assertThatThrownBy(() -> service.report(customer, request(UUID.randomUUID(), null)))
++                .isInstanceOfSatisfying(ResponseStatusException.class, error ->
++                        assertThat(error.getStatusCode().value()).isEqualTo(403));
++        when(db.queryForList(contains("SELECT id FROM products"), eq(17L), eq(2L)))
++                .thenReturn(List.of(Map.of("id", 17)));
++        when(db.update(contains("INSERT INTO customer_damage_reports"), any(Object[].class)))
++                .thenThrow(new DataIntegrityViolationException("No assigned stocker"));
++        assertThatThrownBy(() -> service.report(customer, request(UUID.randomUUID(), null)))
++                .isInstanceOfSatisfying(ResponseStatusException.class, error ->
++                        assertThat(error.getStatusCode().value()).isEqualTo(409));
++        when(db.queryForList(contains("SELECT c.id,c.company_id"), eq("customer@invalid"))).thenReturn(List.of());
++        assertThatThrownBy(() -> service.capabilities(customer)).isInstanceOf(ResponseStatusException.class);
++    }
++
++    @Test
++    void exposesCapabilitiesScopedListsAndExplicitCatalogTruncation() {
++        assertThat(service.capabilities(customer)).containsEntry("companyId", 2L).containsEntry("photoAvailable", true);
++        when(db.queryForList(contains("SELECT id,name"), eq(2L)))
++                .thenReturn(Collections.nCopies(1001, Map.of("id", 17)));
++        when(db.queryForList(contains("FROM product_shelves ps"), eq(2L), eq(2L)))
++                .thenReturn(Collections.nCopies(10001, Map.of("shelf_id", 3)));
++        var options = service.options(customer);
++        assertThat(options).containsEntry("catalogTruncated", true).containsEntry("locationsTruncated", true);
++        assertThat((List<?>) options.get("products")).hasSize(1000);
++        assertThat((List<?>) options.get("locations")).hasSize(10000);
++        assertThat(service.list(customer)).isEmpty();
++        verify(db).queryForList(contains("WHERE r.customer_id=? AND r.company_id=?"), eq(1L), eq(2L));
++    }
++
++    @Test
++    void validatesAndReencodesOptionalJpegBeforeAnyInsert() throws Exception {
++        for (String photo : List.of("", "bm90LWEtcGhvdG8=", "invalid-base64!", "A".repeat(4194305))) {
++            assertThatThrownBy(() -> service.report(customer, request(UUID.randomUUID(), photo)))
++                    .isInstanceOfSatisfying(ResponseStatusException.class, error ->
++                            assertThat(error.getStatusCode().value()).isEqualTo(400));
++        }
++        verify(db, never()).update(contains("INSERT INTO customer_damage_reports"), any(Object[].class));
++        var image = new BufferedImage(20, 20, BufferedImage.TYPE_INT_RGB);
++        var bytes = new ByteArrayOutputStream();
++        ImageIO.write(image, "jpeg", bytes);
++        assertThat(service.report(customer, request(UUID.randomUUID(), Base64.getEncoder().encodeToString(bytes.toByteArray()))))
++                .containsEntry("status", "OPEN");
++    }
++
++    @Test
++    void reusedCommandWithDifferentContentsIsRejectedBeforeAnotherInsert() {
++        when(db.queryForList(contains("SELECT r.id,r.fingerprint"), eq(1L), any(UUID.class)))
++                .thenReturn(List.of(Map.of("fingerprint", "different-content")));
++        assertThatThrownBy(() -> service.report(customer, request(UUID.randomUUID(), null)))
++                .isInstanceOfSatisfying(ResponseStatusException.class, error ->
++                        assertThat(error.getStatusCode().value()).isEqualTo(409));
++        verify(db, never()).update(contains("INSERT INTO customer_damage_reports"), any(Object[].class));
++    }
++}
+diff --git a/src/test/java/com/kairos/kairosapipostgres/service/StockerDamageReportServiceTest.java b/src/test/java/com/kairos/kairosapipostgres/service/StockerDamageReportServiceTest.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..e64b76661f8d8e91eed4b1636a3f1db52854c9b5
+--- /dev/null
++++ b/src/test/java/com/kairos/kairosapipostgres/service/StockerDamageReportServiceTest.java
+@@ -0,0 +1,58 @@
++package com.kairos.kairosapipostgres.service;
++
++import org.junit.jupiter.api.Test;
++import org.springframework.jdbc.core.JdbcTemplate;
++import org.springframework.jdbc.core.RowMapper;
++import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
++import org.springframework.security.core.authority.SimpleGrantedAuthority;
++import org.springframework.web.server.ResponseStatusException;
++
++import java.sql.ResultSet;
++import java.time.OffsetDateTime;
++import java.util.List;
++import java.util.Map;
++
++import static org.assertj.core.api.Assertions.*;
++import static org.mockito.ArgumentMatchers.*;
++import static org.mockito.Mockito.*;
++
++class StockerDamageReportServiceTest {
++    @Test
++    void mapsScopedMetadataAndConfirmsOnlyOpenOrAlreadyResolvedReports() throws Exception {
++        JdbcTemplate db = mock(JdbcTemplate.class);
++        var service = new StockerDamageReportService(db);
++        var auth = new UsernamePasswordAuthenticationToken("stocker@invalid", null,
++                List.of(new SimpleGrantedAuthority("ROLE_EMPLOYEE")));
++        ResultSet row = mock(ResultSet.class);
++        when(row.getLong("id")).thenReturn(91L);
++        when(row.getLong("company_id")).thenReturn(2L);
++        when(row.getString("report_id")).thenReturn("b8b80b83-b86d-47c8-b8ec-8c0361fe3aa5");
++        when(row.getString("problem_type")).thenReturn("DAMAGED");
++        when(row.getString("report_description")).thenReturn("Broken package");
++        when(row.getString("product_name")).thenReturn("Product");
++        when(row.getObject("reported_at", OffsetDateTime.class)).thenReturn(OffsetDateTime.parse("2026-11-05T12:00:00Z"));
++        when(db.query(anyString(), any(RowMapper.class), any(Object[].class))).thenAnswer(invocation -> {
++            RowMapper<?> mapper = invocation.getArgument(1);
++            return List.of(mapper.mapRow(row, 0));
++        });
++        assertThat(service.list(auth).getFirst()).containsEntry("reported_at", "2026-11-05T12:00:00Z")
++                .containsEntry("problem_type", "DAMAGED");
++        when(db.queryForList(contains("FOR UPDATE OF a"), any(Object[].class)))
++                .thenReturn(List.of(Map.of("id", 91L, "status", "OPEN")),
++                        List.of(Map.of("id", 91L, "status", "RESOLVED")),
++                        List.of(Map.of("id", 91L, "status", "CANCELLED")), List.of());
++        assertThat(service.resolve(auth, 91L)).containsEntry("status", "RESOLVED");
++        assertThat(service.resolve(auth, 91L)).containsEntry("status", "RESOLVED");
++        verify(db, times(1)).update(contains("resolution_date=CURRENT_TIMESTAMP"), eq(91L));
++        assertThatThrownBy(() -> service.resolve(auth, 91L)).isInstanceOfSatisfying(ResponseStatusException.class,
++                error -> assertThat(error.getStatusCode().value()).isEqualTo(409));
++        assertThatThrownBy(() -> service.resolve(auth, 91L)).isInstanceOfSatisfying(ResponseStatusException.class,
++                error -> assertThat(error.getStatusCode().value()).isEqualTo(404));
++        when(db.query(anyString(), any(RowMapper.class), any(Object[].class))).thenReturn(List.of());
++        assertThatThrownBy(() -> service.list(auth)).isInstanceOf(ResponseStatusException.class);
++        assertThatThrownBy(() -> service.list(null)).isInstanceOf(ResponseStatusException.class);
++        var customer = new UsernamePasswordAuthenticationToken("customer@invalid", null,
++                List.of(new SimpleGrantedAuthority("ROLE_CUSTOMER")));
++        assertThatThrownBy(() -> service.list(customer)).isInstanceOf(ResponseStatusException.class);
 +    }
 +}

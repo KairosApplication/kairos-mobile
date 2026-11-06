@@ -88,12 +88,19 @@ anexos à tela do repositor.
 Sem a nova rota publicada, a Home continua funcionando e o reporte permanece
 indisponível. Após a publicação, atualizar a Home do cliente.
 
-## Validação
+## Ligacao com o repositor
 
-Passaram a compilação Android, 80 testes unitários, 5 testes no aparelho e 7
-testes PostgreSQL. O patch também passou em `git apply --check` sobre a base.
-Os testes PostgreSQL cobriram reenvio concorrente, escopo entre mercados e
-clientes, atribuição ao repositor, foto, rollback, status e estoque intacto.
-A validação usou somente um container descartável, sem configuração do banco
-de produção. A versão Android foi instalada preservando os dados do aparelho.
-O fluxo completo contra o ambiente publicado depende da publicação do patch.
+- `GET /api/v1/alerts/customer-reports`: metadados de relatos abertos atribuidos ao funcionario autenticado, restritos ao mesmo mercado.
+- `PATCH /api/v1/alerts/customer-reports/{alertId}/resolve`: confirma a resolucao e preserva a primeira data em reenvios.
+- As respostas nao incluem foto nem dados pessoais do cliente e usam `Cache-Control: no-store`.
+- `StockerDamageReports` associa os metadados pelo ID aos alertas ja filtrados. Nao cria alertas, nao infere relatos por descricao e nao modifica entradas.
+- Relatos usam `OBSERVED`, sem analise de reposicao comum, e abrem os detalhes de avaria existentes.
+- O mobile exige o novo contrato quando existem alertas. Erros 403/404 nao sao ignorados: sem metadados, nao e seguro apresentar uma avaria como reposicao comum.
+- A resolucao so e confirmada depois da resposta com o mesmo `alertId` e `status=RESOLVED`; o recarregamento da Home foi preservado.
+- A V5 nao substitui migrations existentes. O teste especifico de atividade diaria continua com target 4; a criacao integral espera cinco migrations e 24 tabelas nesta base.
+
+## Validacao desta revisao
+
+Veja `customer-damage-review.md` para comandos e resultados executados nesta maquina.
+Resultados historicos de outros ambientes nao comprovam esta revisao.
+A API esta somente preparada localmente. O teste completo no ambiente publicado exige alinhamento e publicacao pelo responsavel.
