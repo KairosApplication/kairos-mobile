@@ -56,9 +56,22 @@ class FirebaseTokens(private val auth: FirebaseAuth) : IdentityTokenSource {
 /** No cookie jar, redirects, disk cache, body logging or automatic retry of mutations. */
 class KairosApi(private val base: String, private val tokens: IdentityTokenSource) {
     fun request(uid: String, path: String, method: String = "GET", payload: JSONObject? = null): String {
-        return requestAttempt(uid, path, method, payload, false)
+        return requestAttempt(uid, path, method, payload, false) { stream ->
+            val bytes = java.io.ByteArrayOutputStream()
+            val buffer = ByteArray(8192)
+            while (true) {
+                val count = stream.read(buffer)
+                if (count < 0) break
+                check(bytes.size() + count <= 4 * 1024 * 1024) { "Resposta excedeu o limite permitido." }
+                bytes.write(buffer, 0, count)
+            }
+            bytes.toString("UTF-8")
+        }
     }
-    private fun requestAttempt(uid: String, path: String, method: String, payload: JSONObject?, refreshed: Boolean): String {
+    fun <T> read(uid: String, path: String, reader: (java.io.InputStream) -> T): T =
+        requestAttempt(uid,path,"GET",null,false,reader)
+    private fun <T> requestAttempt(uid: String, path: String, method: String, payload: JSONObject?, refreshed: Boolean,
+        reader: (java.io.InputStream) -> T): T {
         ApiOrigin.validate(base, BuildConfig.DEBUG)
         require(path.startsWith("/api/v1/") && !path.contains(".."))
         fun owner() { if (tokens.uid() != uid) throw AccountChangedException() }
@@ -73,7 +86,6 @@ class KairosApi(private val base: String, private val tokens: IdentityTokenSourc
             connection.connectTimeout = 15_000
             connection.readTimeout = 90_000
             connection.setRequestProperty("Authorization", "Bearer $token")
-            connection.setRequestProperty("X-Kairos-Identity", "firebase")
             connection.setRequestProperty("Accept", "application/json")
             payload?.let {
                 connection.doOutput = true
@@ -86,7 +98,7 @@ class KairosApi(private val base: String, private val tokens: IdentityTokenSourc
                 connection.disconnect()
                 tokens.token(uid, true)
                 owner()
-                return requestAttempt(uid, path, method, payload, true)
+                return requestAttempt(uid, path, method, payload, true,reader)
             }
             if (status !in 200..299) {
                 val code = if (status == 503) runCatching {
@@ -100,17 +112,7 @@ class KairosApi(private val base: String, private val tokens: IdentityTokenSourc
                 }.getOrNull() else null
                 throw ApiFailure(status, code)
             }
-            val body = connection.inputStream.use { stream ->
-                val bytes = java.io.ByteArrayOutputStream()
-                val buffer = ByteArray(8192)
-                while (true) {
-                    val count = stream.read(buffer)
-                    if (count < 0) break
-                    check(bytes.size() + count <= 4 * 1024 * 1024) { "Resposta excedeu o limite permitido." }
-                    bytes.write(buffer, 0, count)
-                }
-                bytes.toString("UTF-8")
-            }
+            val body = connection.inputStream.use(reader)
             owner()
             return body
         } catch (error: java.io.IOException) {
@@ -123,9 +125,9 @@ class KairosApi(private val base: String, private val tokens: IdentityTokenSourc
 class HttpBusinessSession(private val api: KairosApi) : BusinessSessionGateway {
     private fun parse(text: String) = JSONObject(text).let {
         BusinessIdentity(it.optionalLong("userId"), it.optionalLong("employeeId"), it.optionalLong("companyId"),
-            it.getString("role"), it.optString("companyName", ""))
+            it.getString("role"), it.optString("companyName", ""), it.optionalLong("customerId"))
     }
-    override fun session(uid: String) = parse(api.request(uid, "/api/v1/mobile/session"))
+    override fun session(uid: String) = ApiDependencies.identity(uid)
     override fun link(uid: String, password: String) = parse(api.request(uid, "/api/v1/mobile/link", "POST", JSONObject().put("password", password)))
     override fun register(uid: String, profile: UserProfile) = parse(api.request(uid, "/api/v1/mobile/registration", "POST", JSONObject()
         .put("name", profile.name).put("lastName", profile.lastName).put("birthDate", profile.birthDate.toString()).put("cpf", profile.cpf)))
@@ -135,10 +137,18 @@ fun JSONObject.optionalLong(name: String): Long? = if (isNull(name)) null else g
 fun JSONArray.objects(): List<JSONObject> = (0 until length()).map { getJSONObject(it) }
 
 object ApiDependencies {
-    private fun tokens() = object : IdentityTokenSource {
-        override fun uid() = FirebaseTokens(FirebaseAuth.getInstance()).uid()
-        override fun token(uid: String, refresh: Boolean) = FirebaseTokens(FirebaseAuth.getInstance()).token(uid, refresh)
+    @Volatile private var session: SpringSession? = null
+    @Synchronized fun initialize(context: android.content.Context): SpringSession {
+        com.example.kairos.model.cliente.CustomerFavorites.initialize(context)
+        return session ?: SpringSession(BuildConfig.SPRING_API_URL,
+            com.example.kairos.model.auth.EncryptedSessionStore(context)).also { session = it }
     }
+    fun currentUid(): String? = session?.uid()
+    fun identity(uid: String): BusinessIdentity {
+        if (currentUid() != uid) throw AccountChangedException()
+        return session?.restore()?.business ?: throw ApiFailure(401)
+    }
+    private fun tokens(): IdentityTokenSource = session ?: error("Sessão da API não inicializada.")
     fun spring() = KairosApi(BuildConfig.SPRING_API_URL, tokens())
     fun chat() = KairosApi(BuildConfig.CHAT_API_URL, tokens())
 }

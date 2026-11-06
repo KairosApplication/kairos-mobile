@@ -50,6 +50,31 @@ internal class UiKit(val context: Context) {
             addView(text(description,13f,muted=true),LinearLayout.LayoutParams(-1,-2).apply { topMargin=dp(6) })
         },LinearLayout.LayoutParams(0,-2,1f))
     }
+    fun spinnerAdapter(values:List<String>) = object:ArrayAdapter<String>(context,android.R.layout.simple_spinner_item,values) {
+        override fun getView(position:Int,convertView:android.view.View?,parent:android.view.ViewGroup):android.view.View =
+            LinearLayout(context).apply {
+                gravity=Gravity.CENTER_VERTICAL
+                setPadding(dp(14),dp(12),dp(12),dp(12))
+                minimumHeight=dp(52)
+                addView(text(values[position],15f),LinearLayout.LayoutParams(0,-2,1f))
+                addView(ImageView(context).apply {
+                    setImageResource(R.drawable.settings_chevron); rotation=90f
+                    imageTintList=ColorStateList.valueOf(color(R.color.home_secondary))
+                    importantForAccessibility=android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                },LinearLayout.LayoutParams(dp(20),dp(20)))
+            }
+        override fun getDropDownView(position:Int,convertView:android.view.View?,parent:android.view.ViewGroup):android.view.View =
+            text(values[position],15f).apply {
+                setPadding(dp(16),dp(14),dp(16),dp(14)); minimumHeight=dp(48)
+                setBackgroundColor(color(R.color.home_surface))
+            }
+    }
+    fun spinner(values:List<String>) = Spinner(context,Spinner.MODE_DROPDOWN).apply {
+        adapter=spinnerAdapter(values)
+        background=shape(R.color.home_surface,14,true)
+        setPopupBackgroundDrawable(shape(R.color.home_surface,14,true))
+        minimumHeight=dp(52)
+    }
     fun empty(icon: Int, title: String, description: String): LinearLayout = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
         setPadding(dp(24), dp(28), dp(24), dp(28)); background = shape(border = true)

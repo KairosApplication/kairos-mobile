@@ -29,13 +29,18 @@ interface ScannerRepository {
 
 class HttpScannerRepository : ScannerRepository {
     override fun catalog(uid: String): StockCatalog {
-        val data = JSONObject(ApiDependencies.spring().request(uid, "/api/v1/mobile/catalog"))
-        return StockCatalog(data.getJSONArray("shelves").objects().map {
-            CatalogItem(it.getLong("id"), "Gôndola ${it.getLong("id")} · corredor ${it.getInt("aisle")} · ${it.getString("sector")}",
-                it.getInt("aisle").toString(), it.getString("sector"))
-        }, data.getJSONArray("inventories").objects().map { CatalogItem(it.getLong("id"), "Estoque ${it.getLong("id")} · ${it.optString("sector", "")}") },
-            data.getJSONArray("products").objects().map { CatalogItem(it.getLong("id"), "${it.getString("name")} · ${it.optString("brand", "")}") },
-            data.optJSONArray("balances")?.objects()?.map { StockBalance(it.getLong("inventory_id"),it.getLong("product_id"),it.getInt("product_quantity")) }.orEmpty())
+        val api = ApiDependencies.spring()
+        val options = JSONObject(api.request(uid,"/api/v1/restockings/options"))
+        val aisles = org.json.JSONArray(api.request(uid,"/api/v1/aisles/list")).objects().associateBy { it.getLong("id") }
+        return StockCatalog(org.json.JSONArray(api.request(uid,"/api/v1/shelves/list")).objects().map {
+            val sector=aisles[it.getLong("aisleId")]?.optString("sectorName").orEmpty()
+            CatalogItem(it.getLong("id"), "Gôndola ${it.getLong("id")} · corredor ${it.getInt("aislePosition")} · $sector",
+                it.getInt("aislePosition").toString(),sector)
+        }, options.getJSONArray("inventories").objects().map {
+            CatalogItem(it.getLong("id"),"Estoque ${it.getLong("id")} · ${it.optString("sectorName", "")}")
+        }, org.json.JSONArray(api.request(uid,"/api/v1/products/list")).objects().map {
+            CatalogItem(it.getLong("id"),"${it.getString("name")} · ${it.optString("brand", "")}")
+        })
     }
     override fun analyze(uid: String, shelfId: Long, image: ByteArray): ShelfResult {
         require(image.isNotEmpty() && image.size <= 4 * 1024 * 1024 && shelfId > 0)
@@ -52,20 +57,10 @@ class HttpScannerRepository : ScannerRepository {
     }
     override fun confirm(uid: String, request: ConfirmedRestocking) {
         request.validate()
-        ApiDependencies.spring().request(uid, "/api/v1/mobile/restockings/registration", "POST", JSONObject()
-            .put("commandId", request.commandId).put("shelfId", request.shelfId).put("inventoryId", request.inventoryId)
-            .put("productId", request.productId).put("restockedQuantity", request.quantity).put("damagedQuantity", request.damages))
+        throw IllegalArgumentException("A finalização de reposições ainda precisa ser adaptada à API publicada. Nenhum registro foi enviado.")
     }
     override fun resultContext(uid: String) = com.example.kairos.model.home.HttpStockerHomeRepository().load(uid)
     override fun confirmBatch(uid: String, requests: List<ConfirmedRestocking>) {
-        require(requests.isNotEmpty() && requests.size <= 25)
-        val items = org.json.JSONArray()
-        requests.forEach { request ->
-            request.validate()
-            items.put(JSONObject().put("commandId", request.commandId).put("inventoryId", request.inventoryId)
-                .put("shelfId", request.shelfId).put("productId", request.productId)
-                .put("restockedQuantity", request.quantity).put("damagedQuantity", request.damages))
-        }
-        ApiDependencies.spring().request(uid, "/api/v1/mobile/restockings/batch", "POST", JSONObject().put("items", items))
+        throw IllegalArgumentException("A API publicada não oferece finalização em lote com recuperação segura. Nenhum registro foi enviado.")
     }
 }

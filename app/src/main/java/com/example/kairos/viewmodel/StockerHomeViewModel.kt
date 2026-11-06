@@ -61,6 +61,21 @@ class StockerHomeViewModel(
         mutableState.value = StockerHomeUiState()
     }
 
+    fun resolveAlert(uid:String,id:String) {
+        if(uid!=currentUserId) return
+        activeRequest?.cancel(true)
+        val ticket=++generation
+        mutableState.value=mutableState.value!!.copy(loading=true,message="Registrando resolução…")
+        worker.execute {
+            val result=runCatching { repository.resolveAlert(uid,id); repository.load(uid) }
+            main.post {
+                if(ticket==generation && uid==currentUserId) mutableState.value=result.fold(
+                    { StockerHomeUiState(data=it) },
+                    { StockerHomeUiState(data=mutableState.value?.data,failed=true,message=it.message ?: "Não foi possível resolver o alerta.") })
+            }
+        }
+    }
+
     override fun onCleared() {
         generation++
         worker.shutdownNow()

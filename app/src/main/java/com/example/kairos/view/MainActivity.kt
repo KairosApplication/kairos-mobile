@@ -24,7 +24,7 @@ import com.example.kairos.viewmodel.*
 import java.time.LocalDate
 import java.time.format.DateTimeParseException
 
-/** Entrada do Figma; recuperação, perfil e destino provisório usam os fluxos existentes. */
+/** Entrada do Figma e navegação para cadastro, perfil e destinos de cada conta. */
 class MainActivity : AppCompatActivity() {
     private lateinit var vm: AuthViewModel
     private lateinit var form: LinearLayout
@@ -34,12 +34,28 @@ class MainActivity : AppCompatActivity() {
     private lateinit var loadingView: LoadingView
     private lateinit var homeView: StockerHomeView
     private lateinit var homeVm: StockerHomeViewModel
+    private lateinit var customerVm: CustomerViewModel
+    private lateinit var customerHome: CustomerHomeView
+    private val refreshHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val refreshActive = object : Runnable {
+        override fun run() {
+            val state=vm.state.value
+            state?.user?.let { user ->
+                if(state.screen==AuthScreen.HOME) homeVm.load(user.uid,force=true)
+                if(state.screen==AuthScreen.CUSTOMER_HOME) customerVm.load(user.uid,force=true)
+            }
+            refreshHandler.postDelayed(this,20_000L)
+        }
+    }
     private lateinit var chatVm: ChatViewModel
     private var chatDialog: ChatDialog? = null
     private var chatOwner: String? = null
     private var businessScope: String? = null
     private val scannerResult = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == RESULT_OK) vm.state.value?.user?.let { homeVm.load(it.uid, force = true) }
+    }
+    private val customerResult = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) {
+        vm.state.value?.user?.let { user -> customerVm.load(user.uid,force=true) }
     }
     private lateinit var formScroll: ScrollView
     private val fields = linkedMapOf<String, EditText>()
@@ -77,6 +93,7 @@ class MainActivity : AppCompatActivity() {
         enableEdgeToEdge()
         vm = ViewModelProvider(this, AuthViewModel.Factory(AuthDependencies.repository(applicationContext)))[AuthViewModel::class.java]
         homeVm = ViewModelProvider(this, StockerHomeViewModel.Factory(HttpStockerHomeRepository()))[StockerHomeViewModel::class.java]
+        customerVm = ViewModelProvider(this)[CustomerViewModel::class.java]
         chatVm = ViewModelProvider(this)[ChatViewModel::class.java]
         val scroll = ScrollView(this)
         formScroll = scroll
@@ -100,8 +117,18 @@ class MainActivity : AppCompatActivity() {
                     .putExtra("restockShelfId", records.first().shelfCode.toLong())
                     .putExtra("restockProductIds", records.mapNotNull { it.productId }.toLongArray()))
                 UiMotion.open(this)
+            }, onResolveAlert={ id ->
+                vm.state.value?.user?.let { user -> homeVm.resolveAlert(user.uid,id) }
             }).apply { visibility = View.GONE }
         root.addView(homeView, FrameLayout.LayoutParams(-1, -1))
+        customerHome=CustomerHomeView(this,
+            scan={ customerResult.launch(android.content.Intent(this,ReceiptScannerActivity::class.java)) },
+            report={ customerResult.launch(android.content.Intent(this,DamageReportActivity::class.java)) },
+            logout=vm::logout,
+            retry={ vm.state.value?.user?.let { customerVm.load(it.uid,force=true) } },
+            favorite={ product -> vm.state.value?.user?.let { customerVm.favorite(it.uid,product) } },
+            onAccountEdit=vm::editAccount).apply { visibility=View.GONE }
+        root.addView(customerHome,FrameLayout.LayoutParams(-1,-1))
         loadingView = LoadingView(this).apply { visibility = View.GONE }
         root.addView(loadingView, FrameLayout.LayoutParams(-1, -1))
         setContentView(root)
@@ -118,10 +145,18 @@ class MainActivity : AppCompatActivity() {
         }
         authEntry.restore(savedInstanceState?.getBundle("authEntry"))
         homeView.restore(savedInstanceState?.getBundle("home"))
+        customerHome.restore(savedInstanceState?.getBundle("customerHome"))
         homeVm.state.observe(this) {
             homeView.bind(it)
-            if (it.httpStatus == 401 || it.httpStatus == 403) {
+            if (it.httpStatus == 401) {
                 homeVm.reset()
+                vm.businessAccessInterrupted()
+            }
+        }
+        customerVm.state.observe(this) { state ->
+            customerHome.bind(state)
+            if(state.httpStatus == 401) {
+                customerVm.reset()
                 vm.businessAccessInterrupted()
             }
         }
@@ -129,17 +164,19 @@ class MainActivity : AppCompatActivity() {
             val scope = state.user?.let { "${it.uid}:${it.business?.userId}:${it.business?.employeeId}:${it.business?.companyId}:${it.business?.role}" }
             if (businessScope != scope && !(state.loading && state.user == null)) {
                 homeVm.reset(); homeView.reset()
+                customerVm.reset(); customerHome.reset()
                 chatDialog?.close(); chatDialog = null
                 chatVm.account(null)
                 businessScope = scope
                 chatOwner = null
             }
-            if (chatOwner != state.user?.uid) {
+            val chatUid=state.user?.takeUnless { it.business?.role=="CUSTOMER" }?.uid
+            if (chatOwner != chatUid) {
                 chatDialog?.close(); chatDialog = null
-                chatOwner = state.user?.uid
+                chatOwner = chatUid
                 chatVm.account(chatOwner)
             }
-            chatVm.account(state.user?.uid)
+            chatVm.account(chatUid)
             if (state.user != null) {
                 // A sessão restaurada nunca deve ficar atrás do onboarding.
                 onboardingRoot?.let(root::removeView)
@@ -155,6 +192,11 @@ class MainActivity : AppCompatActivity() {
                 state.user?.let { com.example.kairos.model.home.StockerPreferences(this, it.uid).applyTheme(this) }
                 homeView.updateSession(state.user, state.loading, state.message, state.accountOperation, state.accountOperationSucceeded)
                 state.user?.let { homeVm.load(it.uid) }
+            }
+            if(state.screen==AuthScreen.CUSTOMER_HOME) {
+                state.user?.let { com.example.kairos.model.home.StockerPreferences(this,it.uid).applyTheme(this) }
+                customerHome.session(state.user,state.loading,state.message,state.accountOperation,state.accountOperationSucceeded)
+                state.user?.let { customerVm.load(it.uid) }
             }
             if (formScroll.visibility == View.VISIBLE) {
                 message.text = state.message
@@ -174,6 +216,10 @@ class MainActivity : AppCompatActivity() {
                     return
                 }
                 if (vm.state.value?.loading == true) return
+                if(vm.state.value?.screen==AuthScreen.CUSTOMER_HOME) {
+                    if(!customerHome.handleBack()) finish()
+                    return
+                }
                 if (vm.state.value?.screen == AuthScreen.HOME) {
                     if (!homeView.handleBack()) finish()
                     return
@@ -189,6 +235,7 @@ class MainActivity : AppCompatActivity() {
         outState.putString("chatOwner", chatOwner)
         outState.putBundle("authEntry", authEntry.save())
         outState.putBundle("home", homeView.save())
+        outState.putBundle("customerHome", customerHome.save())
         outState.putBoolean("splashCompleted", splashCompleted)
         outState.putBoolean("onboardingCompleted", onboardingCompleted)
         outState.putInt("onboardingPage", onboardingPage)
@@ -302,11 +349,20 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         homeView.refreshDate()
         vm.refreshAccount()
+        refreshHandler.removeCallbacks(refreshActive)
+        refreshHandler.postDelayed(refreshActive,20_000L)
+    }
+
+    override fun onPause() {
+        refreshHandler.removeCallbacks(refreshActive)
+        super.onPause()
     }
 
     override fun onDestroy() {
         chatDialog?.close(); chatDialog = null
         homeView.close()
+        customerHome.close()
+        refreshHandler.removeCallbacksAndMessages(null)
         authEntry.close()
         dismissSplash?.let { splashRoot?.removeCallbacks(it) }
         splashView?.animate()?.withEndAction(null)?.cancel()
@@ -345,15 +401,28 @@ class MainActivity : AppCompatActivity() {
         }
         renderedScreen = state.screen
         val isHome = state.screen == AuthScreen.HOME
+        val isCustomer=state.screen==AuthScreen.CUSTOMER_HOME
         val isEntry = state.screen == AuthScreen.LOGIN || state.screen == AuthScreen.REGISTER
         val isLoading = state.screen == AuthScreen.LOADING
         WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars =
             !isEntry && !isLoading && !isHome && (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK !=
                 android.content.res.Configuration.UI_MODE_NIGHT_YES)
         authEntry.visibility = if (isEntry) View.VISIBLE else View.GONE
-        formScroll.visibility = if (isEntry || isLoading || isHome) View.GONE else View.VISIBLE
+        formScroll.visibility = if (isEntry || isLoading || isHome || isCustomer) View.GONE else View.VISIBLE
+        customerHome.visibility=if(isCustomer) View.VISIBLE else View.GONE
         homeView.visibility = if (isHome) View.VISIBLE else View.GONE
         loadingView.visibility = if (isLoading) View.VISIBLE else View.GONE
+        if(isCustomer) {
+            authEntry.close()
+            fields.clear()
+            controls.clear()
+            customerHome.session(state.user)
+            state.user?.let {
+                com.example.kairos.model.home.StockerPreferences(this,it.uid).applyTheme(this)
+                customerVm.load(it.uid)
+            }
+            return
+        }
         if (isHome) {
             authEntry.close()
             fields.clear()
@@ -393,17 +462,15 @@ class MainActivity : AppCompatActivity() {
                 AuthScreen.LOGIN -> "Login"
                 AuthScreen.LOADING -> getString(R.string.loading)
                 AuthScreen.REGISTER -> "Cadastrar usuário"
-                AuthScreen.RECOVERY -> "Recuperar senha"
                 AuthScreen.COMPLETE_PROFILE -> "Completar cadastro"
                 AuthScreen.BUSINESS_ACCESS -> "Acesso à empresa"
-                AuthScreen.HOME -> "Bem-vindo, ${state.user?.name.orEmpty()}"
+                AuthScreen.HOME, AuthScreen.CUSTOMER_HOME -> "Bem-vindo, ${state.user?.name.orEmpty()}"
             }
         })
         message = TextView(this).apply { accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE }
         form.addView(message)
         progress = ProgressBar(this)
         form.addView(progress)
-        val emailType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
         when (state.screen) {
             AuthScreen.LOGIN, AuthScreen.REGISTER, AuthScreen.LOADING -> Unit // Rendered above.
             AuthScreen.COMPLETE_PROFILE -> {
@@ -424,12 +491,8 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
             }
-            AuthScreen.RECOVERY -> {
-                field("email", "Email cadastrado", emailType)
-                button("Enviar link de recuperação") { vm.requestResetLink(value("email").trim()) }
-            }
             AuthScreen.BUSINESS_ACCESS -> Unit // Rendered by the dedicated access screen.
-            AuthScreen.HOME -> Unit // Rendered by StockerHomeView.
+            AuthScreen.HOME, AuthScreen.CUSTOMER_HOME -> Unit // Rendered by role-specific Home.
         }
         if (state.screen !in listOf(AuthScreen.LOGIN, AuthScreen.HOME)) {
             button("Voltar ao login") { vm.navigate(AuthScreen.LOGIN) }

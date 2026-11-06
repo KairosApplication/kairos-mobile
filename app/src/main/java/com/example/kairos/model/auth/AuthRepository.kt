@@ -4,11 +4,12 @@ package com.example.kairos.model.auth
 interface AuthRepository {
     fun registerAccount(email: String, password: String): SignedInUser
     fun register(request: Registration): SignedInUser
+    fun registerCustomerAccount(request: CustomerRegistration): SignedInUser = error("Cadastro indisponível.")
     fun login(email: String, password: String): SignedInUser
     fun restoreSession(): SignedInUser?
     fun completeProfile(details: ProfileDetails): SignedInUser
-    fun requestPasswordReset(email: String)
     fun logout()
+    fun invalidateSession() = Unit
     fun linkBusinessAccount(password: String): SignedInUser = error("Vínculo indisponível.")
     fun registerCustomer(): SignedInUser = error("Cadastro indisponível.")
     fun updateName(uid: String, name: String, lastName: String): SignedInUser = error("Operação indisponível.")

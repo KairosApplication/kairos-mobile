@@ -55,6 +55,34 @@ class AuthViewModelTest {
         ), business = BusinessIdentity(1, 2, 3, "STOCKER", "Loja")), AuthScreen.HOME)
     }
 
+    @Test fun customerWithConfirmedBusinessIdentityUsesCustomerHome() {
+        verifyRestoration(SignedInUser("customer", "test@example.com", UserProfile(
+            "customer", "Test", "User", LocalDate.of(2000,1,1), "", "test@example.com", "", ""
+        ), business=BusinessIdentity(1,null,3,"CUSTOMER","Loja",customerId=4)),AuthScreen.CUSTOMER_HOME)
+    }
+
+    @Test fun customerRoleWithoutDatabaseCustomerIdDoesNotUnlockHome() {
+        verifyRestoration(SignedInUser("customer", "test@example.com", UserProfile(
+            "customer", "Test", "User", LocalDate.of(2000,1,1), "", "test@example.com", "", ""
+        ), business=BusinessIdentity(1,null,3,"CUSTOMER","Loja")),AuthScreen.BUSINESS_ACCESS)
+    }
+
+    @Test fun publishedCustomerSessionOpensHomeWithoutFirestoreProfileOrCompany() {
+        verifyRestoration(SignedInUser("spring:42","customer@example.invalid",null,
+            business=BusinessIdentity(42,null,null,"CUSTOMER","",apiAuthenticated=true)),AuthScreen.CUSTOMER_HOME)
+    }
+
+    @Test fun publishedEmployeeSessionOpensOperationalHomeWithoutFirebaseProfile() {
+        verifyRestoration(SignedInUser("spring:43","employee@example.invalid",null,
+            business=BusinessIdentity(43,null,null,"EMPLOYEE","",apiAuthenticated=true)),AuthScreen.HOME)
+    }
+
+    @Test fun managerKeepsTheExistingOperationalHome() {
+        verifyRestoration(SignedInUser("manager", "test@example.com", UserProfile(
+            "manager", "Test", "User", LocalDate.of(2000,1,1), "", "test@example.com", "", ""
+        ), business=BusinessIdentity(1,2,3,"MANAGER","Loja")),AuthScreen.HOME)
+    }
+
     @Test fun restoredIncompleteSessionNeverOffersOnboarding() {
         verifyRestoration(SignedInUser("restored", "test@example.com", null), AuthScreen.COMPLETE_PROFILE)
     }
@@ -108,7 +136,6 @@ class AuthViewModelTest {
             override fun register(request: Registration) = error("Unused")
             override fun login(email: String, password: String) = error("Unused")
             override fun completeProfile(details: ProfileDetails) = error("Unused")
-            override fun requestPasswordReset(email: String) = Unit
             override fun logout() = Unit
             override fun updateName(uid: String, name: String, lastName: String): SignedInUser {
                 if (reject) throw IllegalArgumentException("Falha ao salvar")
@@ -260,6 +287,55 @@ class AuthViewModelTest {
             assertEquals(0, signOuts)
         } finally { vm.state.removeObserver(observer) }
     }
+    @Test fun expiredPublishedSessionReturnsToLoginInsteadOfCompanyVerification() {
+        val user=SignedInUser("spring:42","customer@example.invalid",null,
+            business=BusinessIdentity(42,null,null,"CUSTOMER","",apiAuthenticated=true))
+        var invalidated=false
+        val vm=AuthViewModel(object:FakeRepository(false) {
+            override fun restoreSession()=user
+            override fun invalidateSession() { invalidated=true }
+        })
+        store.put("published-expiry",vm)
+        val states=LinkedBlockingQueue<AuthUiState>()
+        val observer=Observer<AuthUiState> { states.offer(it) }
+        vm.state.observeForever(observer)
+        fun finished():AuthUiState {
+            var state:AuthUiState
+            do { state=states.poll(5,TimeUnit.SECONDS) ?: error("Session transition timed out") } while(state.loading)
+            return state
+        }
+        try {
+            assertEquals(AuthScreen.CUSTOMER_HOME,finished().screen)
+            vm.businessAccessInterrupted()
+            val expired=finished()
+            assertEquals(AuthScreen.LOGIN,expired.screen)
+            assertNull(expired.user); assertTrue(invalidated)
+        } finally { vm.state.removeObserver(observer) }
+    }
+
+    @Test fun logoutServerFailureStillReturnsToLoginWithNotice() {
+        val vm=AuthViewModel(object:FakeRepository(false) {
+            override fun restoreSession()=SignedInUser("spring:42","customer@example.invalid",null,
+                business=BusinessIdentity(42,null,null,"CUSTOMER","",apiAuthenticated=true))
+            override fun logout() { throw IllegalArgumentException("Sessão removida deste aparelho. Servidor indisponível.") }
+        })
+        store.put("published-logout",vm)
+        val states=LinkedBlockingQueue<AuthUiState>()
+        val observer=Observer<AuthUiState> { states.offer(it) }
+        vm.state.observeForever(observer)
+        fun finished():AuthUiState {
+            var state:AuthUiState
+            do { state=states.poll(5,TimeUnit.SECONDS) ?: error("Logout timed out") } while(state.loading)
+            return state
+        }
+        try {
+            finished(); vm.logout()
+            val result=finished()
+            assertEquals(AuthScreen.LOGIN,result.screen); assertNull(result.user)
+            assertTrue(result.message.contains("Servidor indisponível"))
+        } finally { vm.state.removeObserver(observer) }
+    }
+
     private open class FakeRepository(private val fail: Boolean) : AuthRepository {
         override fun restoreSession(): SignedInUser? = null
         override fun login(email: String, password: String): SignedInUser {
@@ -271,7 +347,6 @@ class AuthViewModelTest {
         override fun registerAccount(email: String, password: String): SignedInUser = error("Unused")
         override fun register(request: Registration): SignedInUser = error("Unused")
         override fun completeProfile(details: ProfileDetails): SignedInUser = error("Unused")
-        override fun requestPasswordReset(email: String) = Unit
         override fun logout() = Unit
     }
 }

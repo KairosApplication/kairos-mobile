@@ -27,7 +27,7 @@
     <string name="help_restock_answer">Consulte as pendências na aba Alertas. Os dados atuais são demonstrativos; a confirmação de reposições depende da integração com o estoque do mercado.</string>
     <string name="help_scan_answer">O fluxo de verificação de gôndola está em desenvolvimento. A análise automática por foto ainda não está conectada.</string>
     <string name="help_password_answer">Abra Ajustes → Segurança → Senha e toque no ícone de edição. Informe sua senha atual e confirme a nova senha.</string>
-    <string name="help_problem_answer">Confira sua conexão e tente novamente. Para problemas de acesso, use a recuperação de senha na tela de login. O atendimento pelo suporte ainda não está conectado.</string>
+    <string name="help_problem_answer">Confira sua conexão e tente novamente. Para problemas de acesso, procure o responsável pelo seu cadastro no Kairos. O atendimento pelo suporte ainda não está conectado.</string>
     <string name="help_profile_answer">Abra Ajustes → Perfil para consultar seus dados. Em Segurança, você pode editar nome, e-mail e senha. O resumo de trabalho atual usa dados demonstrativos.</string>
     <string name="help_no_results">Nenhuma pergunta encontrada.</string>
     <string name="help_contact_heading">Ainda precisa de ajuda?</string>

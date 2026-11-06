@@ -189,7 +189,13 @@ class AuthEntryView(private val activity: AppCompatActivity, private val vm: Aut
             val edit = androidx.appcompat.widget.AppCompatEditText(context).apply {
                 hint = title
                 contentDescription = title
-                inputType = InputType.TYPE_CLASS_TEXT or if (password) InputType.TYPE_TEXT_VARIATION_PASSWORD else InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+                inputType = when {
+                    password -> InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+                    key=="email" -> InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+                    key=="cpf" || key=="companyId" -> InputType.TYPE_CLASS_NUMBER
+                    key=="birthDate" -> InputType.TYPE_CLASS_NUMBER
+                    else -> InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PERSON_NAME or InputType.TYPE_TEXT_FLAG_CAP_WORDS
+                }
                 typeface = Typeface.create(montserrat, 500, false)
                 fontVariationSettings = "'wght' 500"
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f * scale)
@@ -210,8 +216,12 @@ class AuthEntryView(private val activity: AppCompatActivity, private val vm: Aut
                 setSingleLine(true)
                 if (password) transformationMethod = android.text.method.PasswordTransformationMethod.getInstance()
                 isSaveEnabled = false
-                filters = arrayOf(InputFilter.LengthFilter(255))
-                setAutofillHints(if (!password) AUTOFILL_HINT_EMAIL_ADDRESS else if (register) "newPassword" else AUTOFILL_HINT_PASSWORD)
+                filters = arrayOf(InputFilter.LengthFilter(when(key) {
+                    "cpf"->11; "companyId"->18; "birthDate"->10; "name","lastName"->100; else->255
+                }))
+                if(key=="birthDate") DateInputMask.attach(this)
+                if(key=="email") setAutofillHints(AUTOFILL_HINT_EMAIL_ADDRESS)
+                else if(password) setAutofillHints(if(register) "newPassword" else AUTOFILL_HINT_PASSWORD)
                 imeOptions = if (key == "confirmation" || (!register && password)) EditorInfo.IME_ACTION_DONE else EditorInfo.IME_ACTION_NEXT
                 setOnEditorActionListener { _, action, _ ->
                     if (action == EditorInfo.IME_ACTION_DONE) { submit(); true } else false
@@ -220,6 +230,20 @@ class AuthEntryView(private val activity: AppCompatActivity, private val vm: Aut
             fields[key] = edit
             controls.add(edit)
             panel.addView(edit, LinearLayout.LayoutParams(-1, px(58f)).apply { setMargins(px(24f), 0, px(24f), 0) })
+        }
+        if(register) {
+            input("name","Nome",false)
+            space(12f)
+            input("lastName","Sobrenome",false)
+            space(12f)
+            input("birthDate","Nascimento (DD/MM/AAAA)",false)
+            space(12f)
+            input("cpf","CPF (11 dígitos)",false)
+            space(12f)
+            input("companyId","Código do mercado",false)
+            panel.addView(label("Informe o código fornecido pelo mercado. Seu cadastro será de cliente.",13f,green).apply {
+                gravity=Gravity.START
+            },LinearLayout.LayoutParams(-1,-2).apply { setMargins(px(24f),px(8f),px(24f),px(16f)) })
         }
         input("email", "Email", false)
         space(16f)
@@ -253,13 +277,6 @@ class AuthEntryView(private val activity: AppCompatActivity, private val vm: Aut
             panel.addView(row, LinearLayout.LayoutParams(-1, px(48f)).apply { setMargins(px(24f), 0, px(24f), 0) })
             space(20f)
         } else {
-            space(3f)
-            val recovery = label("Esqueci minha senha", 15f, green, 600).apply {
-                paintFlags = paintFlags or Paint.UNDERLINE_TEXT_FLAG
-                setOnClickListener { vm.navigate(AuthScreen.RECOVERY) }
-            }
-            controls.add(recovery)
-            panel.addView(recovery, LinearLayout.LayoutParams(-1, px(48f)))
             space(20f)
         }
         feedback = label("", 14f, Color.rgb(155, 28, 28)).apply {
@@ -288,6 +305,7 @@ class AuthEntryView(private val activity: AppCompatActivity, private val vm: Aut
                 skipCollapsed = true
                 state = BottomSheetBehavior.STATE_EXPANDED
                 maxWidth = px(412f)
+                if(register) maxHeight=(resources.displayMetrics.heightPixels*.90f).toInt()
             }
         }
         sheet.setOnDismissListener {
@@ -310,7 +328,17 @@ class AuthEntryView(private val activity: AppCompatActivity, private val vm: Aut
         val email = fields["email"]?.text.toString().trim()
         val password = fields["password"]?.text.toString()
         if (registration) {
-            vm.registerAccount(email, password, fields["confirmation"]?.text.toString(), consent?.isChecked == true)
+            try {
+                val date=java.time.LocalDate.parse(fields["birthDate"]?.text.toString().trim(),
+                    java.time.format.DateTimeFormatter.ofPattern("dd/MM/uuuu").withResolverStyle(java.time.format.ResolverStyle.STRICT))
+                val companyId=fields["companyId"]?.text.toString().toLongOrNull()
+                    ?: throw IllegalArgumentException("Informe o código do mercado fornecido pelo estabelecimento.")
+                vm.registerCustomerAccount(com.example.kairos.model.auth.CustomerRegistration(
+                    fields["name"]?.text.toString().trim(),fields["lastName"]?.text.toString().trim(),date,
+                    fields["cpf"]?.text.toString().trim(),email,password,companyId),fields["confirmation"]?.text.toString())
+            } catch(_:java.time.format.DateTimeParseException) {
+                vm.showError("Informe uma data de nascimento válida no formato DD/MM/AAAA.")
+            } catch(error:IllegalArgumentException) { vm.showError(error.message.orEmpty()) }
         } else vm.login(email, password)
     }
 

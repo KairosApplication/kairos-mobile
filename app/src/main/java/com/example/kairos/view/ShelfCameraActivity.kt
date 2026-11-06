@@ -22,6 +22,11 @@ import java.io.File
 
 /** CameraX preview/capture is lifecycle-bound. Only the generated private cache filename crosses activities. */
 class ShelfCameraActivity : AppCompatActivity() {
+    private val receiptMode get() = intent.getStringExtra("captureMode")=="receipt"
+    private val damageMode get() = intent.getStringExtra("captureMode")=="damage"
+    private val cameraInstructions get() = if(receiptMode) "Enquadre os itens e valores da nota. Evite incluir dados pessoais."
+        else if(damageMode) "Mostre o produto e o problema com nitidez. Evite fotografar pessoas."
+        else "Enquadre a gôndola inteira e toque no botão para fotografar."
     private lateinit var preview: PreviewView
     private lateinit var feedback: TextView
     private lateinit var shutter: ImageButton
@@ -31,7 +36,7 @@ class ShelfCameraActivity : AppCompatActivity() {
     private var capturing = false
     private val permission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) bindCamera() else {
-            feedback.text = "Permita o acesso à câmera nas configurações do aplicativo para fotografar a gôndola."
+            feedback.text = "Permita o acesso à câmera nas configurações do aplicativo para fotografar."
             shutter.isEnabled = false
         }
     }
@@ -52,13 +57,13 @@ class ShelfCameraActivity : AppCompatActivity() {
             setOnClickListener { finish() }
         }, LinearLayout.LayoutParams(dp(48), dp(48)))
         header.addView(TextView(this).apply {
-            text = "Fotografar gôndola"; textSize = 20f; setTextColor(Color.WHITE)
+                text = if(receiptMode) "Fotografar nota fiscal" else if(damageMode) "Fotografar avaria" else "Fotografar gôndola"; textSize = 20f; setTextColor(Color.WHITE)
             typeface = ResourcesCompat.getFont(this@ShelfCameraActivity, R.font.montserrat_semibold)
             gravity = Gravity.CENTER
         }, LinearLayout.LayoutParams(0, -2, 1f))
         root.addView(header)
         feedback = TextView(this).apply {
-            text = "Enquadre a gôndola inteira e toque no botão para fotografar."
+            text = cameraInstructions
             textSize = 14f; setTextColor(0xDFFFFFFF.toInt()); gravity = Gravity.CENTER
             typeface = ResourcesCompat.getFont(this@ShelfCameraActivity, R.font.montserrat_regular)
             setPadding(dp(24), dp(8), dp(24), dp(20))
@@ -97,7 +102,9 @@ class ShelfCameraActivity : AppCompatActivity() {
         controls.addView(shutter, FrameLayout.LayoutParams(dp(105), dp(105), Gravity.CENTER))
         root.addView(controls, LinearLayout.LayoutParams(-1, dp(136)))
         root.addView(TextView(this).apply {
-            text = "Boa iluminação • Câmera firme • Gôndola inteira"; textSize = 11f
+            text = if(damageMode) "Boa iluminação • Câmera firme • Problema visível"
+                else if(receiptMode) "Boa iluminação • Câmera firme • Itens legíveis"
+                else "Boa iluminação • Câmera firme • Gôndola inteira"; textSize = 11f
             gravity = Gravity.CENTER; setTextColor(0xBFFFFFFF.toInt())
             typeface = ResourcesCompat.getFont(this@ShelfCameraActivity, R.font.montserrat_regular)
         })
@@ -118,7 +125,7 @@ class ShelfCameraActivity : AppCompatActivity() {
                     .setTargetRotation(preview.display?.rotation ?: android.view.Surface.ROTATION_0).build()
                 provider.unbindAll(); provider.bindToLifecycle(this, selector, view, photo)
                 capture = photo; shutter.isEnabled = true
-                feedback.text = "Enquadre a gôndola inteira e toque no botão para fotografar."
+                feedback.text = cameraInstructions
             } catch (_: Exception) { feedback.text = "Câmera indisponível. Volte e tente novamente." }
         }, ContextCompat.getMainExecutor(this))
     }

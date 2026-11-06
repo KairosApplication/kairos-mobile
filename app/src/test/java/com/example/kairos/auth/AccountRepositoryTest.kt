@@ -18,7 +18,6 @@ class AccountRepositoryTest {
         override fun create(email: String, password: String) = error("Unused")
         override fun signIn(email: String, password: String) = error("Unused")
         override fun current() = identity
-        override fun sendResetLink(email: String) = Unit
         override fun signOut() { identity = null }
         override fun refreshToken() { refreshes++ }
         override fun requestEmailChange(uid: String, email: String, password: String) {

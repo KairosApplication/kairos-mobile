@@ -11,7 +11,6 @@ class FirebaseAuthRepositoryTest {
     private class AuthFake : AuthGateway {
         var identity: AuthIdentity? = null
         var creates = 0
-        var resetEmail: String? = null
         override fun create(email: String, password: String): AuthIdentity {
             creates++
             return AuthIdentity("firebase-uid", email).also { identity = it }
@@ -19,7 +18,6 @@ class FirebaseAuthRepositoryTest {
         override fun signIn(email: String, password: String) =
             AuthIdentity("firebase-uid", email).also { identity = it }
         override fun current() = identity
-        override fun sendResetLink(email: String) { resetEmail = email }
         override fun signOut() { identity = null }
     }
     private class StoreFake : ProfileStore {
@@ -97,11 +95,6 @@ class FirebaseAuthRepositoryTest {
         repo.register(request)
         repo.completeProfile(request.details().copy(name = "Outro nome"))
         assertEquals("Ana", store.saved!!.name)
-    }
-
-    @Test fun resetDelegatesOnlyEmail() {
-        repo.requestPasswordReset(request.email)
-        assertEquals(request.email, auth.resetEmail)
     }
 
     @Test fun rejectsInvalidDataBeforeCreatingAccount() {

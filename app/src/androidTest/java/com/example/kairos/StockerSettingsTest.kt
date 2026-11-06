@@ -64,7 +64,7 @@ class StockerSettingsTest {
                     else if (destination == SettingsDestination.NOTIFICATIONS) assertNotNull(home.findViewById<View>(R.id.settings_notifications_content))
                     else if (destination == SettingsDestination.APPEARANCE) assertNotNull(home.findViewById<View>(R.id.settings_appearance_content))
                     else if (destination == SettingsDestination.HELP) assertNotNull(home.findViewById<View>(R.id.settings_help_content))
-                    else assertNotNull(home.findViewById<View>(R.id.settings_template))
+                    else assertNotNull(home.findViewById<View>(R.id.settings_about_content))
                     assertTrue(home.findViewById<View>(R.id.home_nav_config).isSelected)
                     assertEquals(View.VISIBLE, home.findViewById<View>(R.id.settings_back).visibility)
                     home.findViewById<View>(R.id.settings_back).performClick()

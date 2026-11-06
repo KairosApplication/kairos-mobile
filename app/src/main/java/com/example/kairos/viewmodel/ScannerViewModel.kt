@@ -1,13 +1,11 @@
 package com.example.kairos.viewmodel
 
-import android.graphics.BitmapFactory
 import androidx.lifecycle.*
 import android.os.Handler
 import android.os.Looper
 import com.example.kairos.model.scanner.*
 import com.example.kairos.model.auth.AccountChangedException
 import java.io.File
-import java.io.ByteArrayOutputStream
 import java.util.UUID
 import java.util.concurrent.Executors
 
@@ -93,27 +91,7 @@ class ScannerViewModel(private val repository: ScannerRepository = HttpScannerRe
         run { before ->
             val shelf = before.shelfId ?: throw IllegalArgumentException("Selecione a gôndola autorizada.")
             val file = before.photo ?: throw IllegalArgumentException("Fotografe a gôndola primeiro.")
-            require(file.length() in 1..(24L * 1024 * 1024)) { "Foto inválida ou maior que 24 MiB. Repita a captura." }
-            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            BitmapFactory.decodeFile(file.path, bounds)
-            require(bounds.outWidth > 0 && bounds.outHeight > 0 && bounds.outWidth.toLong() * bounds.outHeight <= 100_000_000) { "Resolução inválida." }
-            var sample = 1
-            while (maxOf(bounds.outWidth, bounds.outHeight) / sample > 1600) sample *= 2
-            val decoded = BitmapFactory.decodeFile(file.path, BitmapFactory.Options().apply { inSampleSize = sample })
-                ?: throw IllegalArgumentException("Não foi possível ler a foto.")
-            val orientation = android.media.ExifInterface(file.path).getAttributeInt(android.media.ExifInterface.TAG_ORIENTATION, android.media.ExifInterface.ORIENTATION_NORMAL)
-            val rotation = when (orientation) {
-                android.media.ExifInterface.ORIENTATION_ROTATE_90 -> 90f
-                android.media.ExifInterface.ORIENTATION_ROTATE_180 -> 180f
-                android.media.ExifInterface.ORIENTATION_ROTATE_270 -> 270f
-                else -> 0f
-            }
-            val bitmap = if (rotation == 0f) decoded else android.graphics.Bitmap.createBitmap(decoded, 0, 0,
-                decoded.width, decoded.height, android.graphics.Matrix().apply { postRotate(rotation) }, true)
-                .also { if (it !== decoded) decoded.recycle() }
-            val image = try { ByteArrayOutputStream().use { output -> bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, output); output.toByteArray() } }
-                finally { bitmap.recycle() }
-            require(image.size <= 4 * 1024 * 1024) { "A imagem excede 4 MiB. Repita a captura." }
+            val image = CapturedPhoto.jpeg(file)
             val context = repository.resultContext(owner)
             val result = repository.analyze(owner, shelf, image)
             before.copy(step = ScannerStep.RESULT, result = result, marketData = context, analyzedAt = java.time.Instant.now(), error = "")

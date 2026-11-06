@@ -67,7 +67,8 @@ class StockerHomeView(
     private val onChat: (() -> Unit)? = null,
     private val onScanner: (() -> Unit)? = null,
     private val onRestock: ((List<RestockingRecord>) -> Unit)? = null,
-    private val onResultBack: (() -> Unit)? = null
+    private val onResultBack: (() -> Unit)? = null,
+    private val onResolveAlert: ((String) -> Unit)? = null
 ) : FrameLayout(activity) {
     private enum class Tab(val label: Int, val icon: Int, val viewId: Int) {
         START(R.string.home_start, R.drawable.home_house, R.id.home_nav_start),
@@ -808,7 +809,7 @@ class StockerHomeView(
                 typeface = Typeface.create(montserrat, 400, false)
                 fontVariationSettings = "'wght' 400"
             }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(4f) })
-            addView(label(str(statusText), 14f, statusColor),
+            addView(label(if(record.customerReport!=null) "Reporte de avaria" else str(statusText), 14f, statusColor),
                 LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(3f) })
         }, LinearLayout.LayoutParams(0, -2, 1f))
         val colors = when (record.status) {
@@ -840,6 +841,14 @@ class StockerHomeView(
 
     private fun showRestockingDetails(record: RestockingRecord, subtitle: String) {
         close()
+        if(record.customerReport!=null) {
+            val report=org.json.JSONObject(record.customerReport)
+            val message="Produto: ${record.productName}\nLocalização: ${record.shelfCode}\nTipo: ${CustomerHomeView.problem(report.getString("problem_type"))}\nDescrição: ${report.optString("report_description")}\nData: ${report.optString("reported_at")}\nStatus: Em análise\n\nEste relato não alterou o estoque."
+            dialog=InfoCardDialog.show(activity,scale,"Reporte de avaria",message,
+                primary=if(onResolveAlert==null) "Fechar" else "Marcar como resolvido",
+                action=onResolveAlert?.let { callback -> { callback(record.id) } })
+            return
+        }
         val details = state.data?.analysisFor(record)
         dialog = InfoCardDialog.show(activity, scale, record.productName,
             if (record.status == RestockingStatus.COMPLETED) "Reposição concluída. Consulte os produtos e os dados registrados."
@@ -1117,7 +1126,7 @@ class StockerHomeView(
                 setOnClickListener {
                     filterDialog.dismiss()
                     historyFilter = HistoryFilter()
-                    findViewById<EditText>(R.id.history_search)?.setText("")
+                    this@StockerHomeView.findViewById<EditText>(R.id.history_search)?.setText("")
                     renderHistoryResults()
                 }
             }, LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = px(4f) })
@@ -1170,15 +1179,8 @@ class StockerHomeView(
             }
             return
         }
-        sectionLabel(str(R.string.settings_account), 23f)
-        addSettingsCard(SettingsDestination.PROFILE, 13f)
-        addSettingsCard(SettingsDestination.SECURITY, 10f)
-        sectionLabel(str(R.string.settings_preferences), 18f)
-        addSettingsCard(SettingsDestination.NOTIFICATIONS, 13f)
-        addSettingsCard(SettingsDestination.APPEARANCE, 10f)
-        sectionLabel(str(R.string.settings_support_section), 16f)
-        addSettingsCard(SettingsDestination.HELP, 13f)
-        addSettingsCard(SettingsDestination.ABOUT, 10f)
+        body.addView(com.example.kairos.view.settings.SettingsMenuView(context,scale,signingOut,::openSettings,user?.business?.apiAuthenticated==true),
+            LinearLayout.LayoutParams(-1,-2))
     }
 
     private fun editAccount(field: AccountEditField) {
